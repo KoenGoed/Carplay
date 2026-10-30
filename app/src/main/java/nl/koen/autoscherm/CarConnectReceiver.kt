@@ -27,11 +27,15 @@ class CarConnectReceiver : BroadcastReceiver() {
         val prefs = context.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
 
         if (action == BluetoothDevice.ACTION_ACL_CONNECTED) {
-            prefs.edit().putBoolean("car_connected", true).apply()
+            // Eén keer per rit Flitsmeister en muziek starten (niet bij een korte haper in de verbinding)
+            val now = System.currentTimeMillis()
+            val firstThisTrip = now - prefs.getLong("car_start_time", 0L) > 2 * 60_000
+            prefs.edit().putBoolean("car_connected", true).putLong("car_start_time", now).apply()
             try {
                 context.startActivity(
                     Intent(context, MainActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                        .putExtra(MainActivity.EXTRA_CAR_START, firstThisTrip)
                 )
             } catch (ignored: Exception) { }
         } else {

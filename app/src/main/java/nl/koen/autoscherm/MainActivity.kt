@@ -60,6 +60,7 @@ class MainActivity : Activity() {
         private const val SPOTIFY = "com.spotify.music"
         private const val MAPS = "com.google.android.apps.maps"
         const val EXTRA_LISTEN = "listen"
+        const val EXTRA_CAR_START = "car_start"
 
         /** Staat het autoscherm nu in beeld? (gebruikt door het belscherm) */
         @Volatile
@@ -186,6 +187,7 @@ class MainActivity : Activity() {
         setupTabs()
         arrangeDrivePage()
         handleListenExtra(intent)
+        handleCarStart(intent)
         versionLabel = try { "\nversie " + packageManager.getPackageInfo(packageName, 0).versionName } catch (e: Exception) { "" }
         askPermissions()
     }
@@ -212,6 +214,7 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleListenExtra(intent)
+        handleCarStart(intent)
     }
 
     override fun onResume() {
@@ -1065,5 +1068,54 @@ class MainActivity : Activity() {
             else LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)).apply {
             if (landscape) marginStart = gap else topMargin = gap
         }
+    }
+
+    // ---------- Instappen: Flitsmeister op de achtergrond en muziek aan ----------
+
+    private fun handleCarStart(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_CAR_START, false) != true) return
+        intent.removeExtra(EXTRA_CAR_START)
+
+        val flits = apps.firstOrNull { it.label == "Flitsmeister" }?.let { launchIntentFor(it) }
+        if (flits != null) {
+            try {
+                startActivity(flits.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (ignored: Exception) { }
+            // Flitsmeister blijft op de achtergrond draaien; het autoscherm komt weer naar voren
+            handler.postDelayed({ bringToFront() }, 2500)
+        }
+        // Even wachten tot het geluid via de carkit loopt
+        handler.postDelayed({ startMusic() }, if (flits != null) 4500L else 3000L)
+    }
+
+    private fun bringToFront() {
+        try {
+            startActivity(
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            )
+        } catch (ignored: Exception) { }
+    }
+
+    private fun startMusic() {
+        val audio = getSystemService(AudioManager::class.java)
+        if (audio.isMusicActive) return
+        val c = controller
+        if (c != null && c.packageName == SPOTIFY) c.transportControls.play()
+        else sendMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY)
+
+        // Speelt er na 2 seconden nog niets? Dan Spotify zelf laten starten met je muziek
+        handler.postDelayed({
+            if (!audio.isMusicActive) {
+                val play = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH)
+                    .setPackage(SPOTIFY)
+                    .putExtra(SearchManager.QUERY, "")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (play.resolveActivity(packageManager) != null) {
+                    try { startActivity(play) } catch (ignored: Exception) { }
+                    handler.postDelayed({ bringToFront() }, 3000)
+                }
+            }
+        }, 2000)
     }
 }

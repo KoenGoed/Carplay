@@ -1,5 +1,2 @@
 Nieuw in deze versie:
-- Vier tabbladen onderaan: Rijden, Muziek, Apps en Plekken. Tik op een tabblad of veeg naar links of rechts.
-- Rijden: grote snelheidsmeter met maximumsnelheid, plus een klein muziekblok met afspelen en volgende.
-- Apps: kleinere, nettere knoppen.
-- Plekken: Thuis, je tweede plek en Mijn auto. De tweede plek heet nu "Werk", maar die naam kies je zelf: houd hem lang ingedrukt om naam en adres te wijzigen.
+- Instappen: zodra je met WEGMAN CARKIT verbindt, start Flitsmeister op de achtergrond en begint Spotify te spelen waar je gebleven was. Het autoscherm blijft in beeld.
