@@ -1,0 +1,27 @@
+name: Bouw Autoscherm APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Zip uitpakken
+        run: unzip -o Autoscherm.zip
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: APK bouwen
+        working-directory: Autoscherm
+        run: gradle assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Autoscherm-apk
+          path: Autoscherm/app/build/outputs/apk/debug/app-debug.apk
