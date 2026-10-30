@@ -126,6 +126,10 @@ class MainActivity : Activity() {
     private var lastLimitTime = 0L
     private var currentLimit: Int? = null
     private var currentSpeed: Int? = null
+    private var limitFailed = false
+
+    // "Hey Golf"
+    private lateinit var wake: WakeWord
 
     // Nachtstand
     private var nightOn: Boolean? = null
@@ -186,6 +190,7 @@ class MainActivity : Activity() {
         setupUpdates()
         setupTabs()
         arrangeDrivePage()
+        setupRouteSettings()
         handleListenExtra(intent)
         handleCarStart(intent)
         versionLabel = try { "\nversie " + packageManager.getPackageInfo(packageName, 0).versionName } catch (e: Exception) { "" }
@@ -204,6 +209,7 @@ class MainActivity : Activity() {
             Manifest.permission.READ_CALL_LOG,
             Manifest.permission.ANSWER_PHONE_CALLS,
             Manifest.permission.READ_CONTACTS,
+            Manifest.permission.RECORD_AUDIO,
         )
         if (Build.VERSION.SDK_INT >= 31) wanted += Manifest.permission.BLUETOOTH_CONNECT
         val missing = wanted.filter { !hasPerm(it) }
@@ -225,7 +231,9 @@ class MainActivity : Activity() {
         handler.postDelayed(stopBubble, 1200)
         startLocation()
         refreshCarTile()
+        refreshSettingsInfo()
         applyNight()
+        wake.start()
         handler.post(clockTick)
         connectMedia()
         hideSystemBars()
@@ -238,6 +246,7 @@ class MainActivity : Activity() {
         handler.removeCallbacks(stopBubble)
         visible = false
         stopLocation()
+        wake.stop()
     }
 
     override fun onDestroy() {
@@ -519,6 +528,11 @@ class MainActivity : Activity() {
             if (status == TextToSpeech.SUCCESS) tts?.language = Locale("nl", "NL")
         }
         findViewById<ImageButton>(R.id.btnMic).setOnClickListener { startListening() }
+        wake = WakeWord(
+            this,
+            onWake = { if (visible) startListening() },
+            onStatus = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() },
+        )
     }
 
     private fun handleListenExtra(intent: Intent?) {
@@ -583,6 +597,13 @@ class MainActivity : Activity() {
         // Bellen
         after(listOf("bel naar ", "bellen naar ", "bel ", "telefoneer "))?.let { name ->
             callContact(name.removeSuffix(" op").trim()); return
+        }
+
+        // Snelste route naar huis (vaste routes vergelijken met de files van nu)
+        if (t.contains("snelste route") || t.contains("welke route") || t.contains("beste route") ||
+            (t.contains("route") && t.contains("huis") && t.contains("snel"))
+        ) {
+            fastestHome(); return
         }
 
         // Navigeren
@@ -684,6 +705,7 @@ class MainActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_PERMS) {
             startLocation()
+            if (visible) wake.start()
             return
         }
         if (requestCode != REQ_CONTACTS) return
@@ -888,8 +910,8 @@ class MainActivity : Activity() {
         if (limitLookupBusy) return
         val prev = lastLimitLoc
         val now = System.currentTimeMillis()
-        val moved = prev == null || prev.distanceTo(loc) > 120
-        val stale = now - lastLimitTime > 30_000
+        val moved = prev == null || prev.distanceTo(loc) > 250
+        val stale = now - lastLimitTime > 45_000
         if (!moved && !stale) return
         if (prev != null && (currentSpeed ?: 0) < 5 && !stale) return
         limitLookupBusy = true
@@ -897,27 +919,41 @@ class MainActivity : Activity() {
         lastLimitTime = now
         val lat = loc.latitude
         val lon = loc.longitude
+        val heading = if (loc.hasBearing() && loc.hasSpeed() && loc.speed > 2) loc.bearing else null
+        val key = TomTom.key(this)
         Thread {
             var result: Int? = null
-            var ok = true
-            try {
-                result = SpeedLimit.lookup(lat, lon)
-            } catch (e: Exception) {
-                ok = false
+            var ok = false
+            // 1. TomTom (betrouwbaar, als er een sleutel is ingesteld)
+            if (key != null) {
+                try {
+                    result = TomTom.speedLimit(key, lat, lon, heading)
+                    ok = true
+                } catch (ignored: Exception) { }
+            }
+            // 2. Gratis OpenStreetMap-servers als reserve
+            if (result == null) {
+                try {
+                    result = SpeedLimit.lookup(lat, lon)
+                    ok = true
+                } catch (ignored: Exception) { }
             }
             runOnUiThread {
                 limitLookupBusy = false
-                if (ok) {
-                    currentLimit = result
-                    showLimit()
-                }
+                limitFailed = !ok
+                if (ok) currentLimit = result
+                showLimit()
             }
         }.start()
     }
 
     private fun showLimit() {
         val limit = currentLimit
-        if (limit == null) {
+        if (limit == null && limitFailed) {
+            // Even geen verbinding met de dienst: laat zien dat de app het probeert
+            speedLimit.text = "?"
+            speedLimit.visibility = View.VISIBLE
+        } else if (limit == null) {
             speedLimit.visibility = View.INVISIBLE
         } else {
             speedLimit.text = limit.toString()
@@ -1117,5 +1153,158 @@ class MainActivity : Activity() {
                 }
             }
         }, 2000)
+    }
+
+    // ---------- Snelste route naar huis ----------
+
+    private fun routeName(slot: String) =
+        prefs.getString("route_${slot}_name", null)?.takeIf { it.isNotBlank() }
+            ?: if (slot == "a") "Via het kanaal" else "Via OK"
+
+    private fun routeVia(slot: String) = prefs.getString("route_${slot}_via", null)?.trim().orEmpty()
+
+    private fun setupRouteSettings() {
+        findViewById<View>(R.id.routeHome).setOnClickListener { fastestHome() }
+        findViewById<View>(R.id.routeSettings).setOnClickListener { editRoutes() }
+        findViewById<View>(R.id.tomtomSettings).setOnClickListener { editTomTomKey() }
+        refreshSettingsInfo()
+    }
+
+    private fun refreshSettingsInfo() {
+        val names = listOf("a", "b").filter { routeVia(it).isNotEmpty() }.map { routeName(it) }
+        findViewById<TextView>(R.id.routeSettingsInfo).text =
+            if (names.isEmpty()) "Nog niet ingesteld" else names.joinToString("  •  ")
+        findViewById<TextView>(R.id.tomtomInfo).text =
+            if (TomTom.key(this) == null) "Nog niet ingesteld — nodig voor files en maximumsnelheid" else "Ingesteld"
+    }
+
+    private fun formField(hint: String, value: String): EditText = EditText(this).apply {
+        this.hint = hint
+        setText(value)
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+    }
+
+    private fun formLayout(vararg views: View): LinearLayout {
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            views.forEach { addView(it) }
+        }
+    }
+
+    private fun label(text: String) = TextView(this).apply {
+        this.text = text
+        setTextColor(getColor(R.color.muted))
+        textSize = 13f
+        setPadding(0, (12 * resources.displayMetrics.density).toInt(), 0, 0)
+    }
+
+    private fun editRoutes() {
+        val aName = formField("Naam, bijv. Via het kanaal", routeName("a"))
+        val aVia = formField("Punt op die route, bijv. een straat en plaats", routeVia("a"))
+        val bName = formField("Naam, bijv. Via OK", routeName("b"))
+        val bVia = formField("Punt op die route, bijv. OK tankstation + straat + plaats", routeVia("b"))
+        AlertDialog.Builder(this)
+            .setTitle("Routes naar huis")
+            .setView(formLayout(
+                label("Route 1"), aName, aVia,
+                label("Route 2"), bName, bVia,
+                label("Vul bij elke route een plek in waar alleen die route langs komt. De app vergelijkt dan de reistijd met de files van nu."),
+            ))
+            .setPositiveButton("Opslaan") { _, _ ->
+                prefs.edit()
+                    .putString("route_a_name", aName.text.toString().trim())
+                    .putString("route_a_via", aVia.text.toString().trim())
+                    .putString("route_b_name", bName.text.toString().trim())
+                    .putString("route_b_via", bVia.text.toString().trim())
+                    .apply()
+                refreshSettingsInfo()
+            }
+            .setNegativeButton("Annuleren", null)
+            .show()
+    }
+
+    private fun editTomTomKey() {
+        val keyField = formField("Plak hier je sleutel", TomTom.key(this) ?: "").apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        val help = label(
+            "Maak gratis een account op developer.tomtom.com, ga naar Keys en kopieer je API-sleutel. " +
+                    "Daarmee ziet de app de files van nu en de maximumsnelheid."
+        ).apply { setTextIsSelectable(true) }
+        AlertDialog.Builder(this)
+            .setTitle("Verkeersinfo (TomTom)")
+            .setView(formLayout(help, keyField))
+            .setPositiveButton("Opslaan") { _, _ ->
+                prefs.edit().putString("tomtom_key", keyField.text.toString().trim()).apply()
+                refreshSettingsInfo()
+            }
+            .setNegativeButton("Annuleren", null)
+            .show()
+    }
+
+    private fun fastestHome() {
+        val key = TomTom.key(this)
+        if (key == null) {
+            say("Stel eerst bij Plekken je TomTom-sleutel in, dan kan ik de files bekijken.")
+            return
+        }
+        val home = prefs.getString("dest_home", null)
+        if (home.isNullOrBlank()) {
+            say("Ik weet je thuisadres nog niet. Stel het in bij Plekken.")
+            return
+        }
+        val routes = listOf("a", "b").filter { routeVia(it).isNotEmpty() }.map { routeName(it) to routeVia(it) }
+        val last = LocationStore.last(this)
+        val work = prefs.getString("dest_work", null)
+        say("Even kijken wat het snelst is")
+        Thread {
+            try {
+                val fromGps = last != null && System.currentTimeMillis() - last.time < 15 * 60_000
+                val origin: TomTom.Point = (if (fromGps) TomTom.Point(last!!.lat, last.lon)
+                    else work?.takeIf { it.isNotBlank() }?.let { TomTom.geocode(this, key, it) })
+                    ?: throw IllegalStateException("Geen startpunt")
+                val dest = TomTom.geocode(this, key, home) ?: throw IllegalStateException("Thuisadres niet gevonden")
+                val direct = TomTom.route(key, listOf(origin, dest)) ?: throw IllegalStateException("Geen route")
+                val options = routes.mapNotNull { (name, via) ->
+                    val p = TomTom.geocode(this, key, via) ?: return@mapNotNull null
+                    TomTom.route(key, listOf(origin, p, dest))?.let { name to it }
+                }
+                runOnUiThread { announceRoutes(direct, options, home) }
+            } catch (e: Exception) {
+                runOnUiThread { say("Het lukte niet om de routes op te halen. Controleer je internet en je TomTom-sleutel.") }
+            }
+        }.start()
+    }
+
+    private fun announceRoutes(direct: TomTom.Route, options: List<Pair<String, TomTom.Route>>, home: String) {
+        fun minutes(s: Int) = (s + 30) / 60
+        fun spoken(name: String) = name.replaceFirst(Regex("^Via", RegexOption.IGNORE_CASE), "via")
+        fun delayText(s: Int) = if (s >= 120) " Er staat ongeveer ${minutes(s)} minuten file." else ""
+
+        if (options.isEmpty()) {
+            say("Naar huis ben je ${minutes(direct.seconds)} minuten onderweg.${delayText(direct.delaySeconds)} " +
+                    "Stel bij Plekken je vaste routes in om ze te vergelijken.")
+            return
+        }
+        val sorted = options.sortedBy { it.second.seconds }
+        val best = sorted.first()
+
+        // Is een heel andere weg duidelijk sneller? Dan is er waarschijnlijk iets gebeurd: Maps aan.
+        if (direct.seconds < best.second.seconds - 180) {
+            say("Er is iets aan de hand op je vaste routes. Via een andere weg ben je in ${minutes(direct.seconds)} minuten thuis. Ik zet Maps aan.")
+            handler.postDelayed({ navigateTo(home) }, 5000)
+            return
+        }
+
+        val overview = sorted.joinToString(", ") { (name, r) -> "${spoken(name)} ${minutes(r.seconds)} minuten" }
+        val advice = if (sorted.size > 1 && sorted[1].second.seconds - best.second.seconds < 60) {
+            "Ze zijn ongeveer even snel, dus kies wat je fijn vindt."
+        } else {
+            "Rij ${spoken(best.first)}."
+        }
+        val text = overview.replaceFirstChar { it.uppercase() } + ". " + advice + delayText(best.second.delaySeconds)
+        say(text)
     }
 }

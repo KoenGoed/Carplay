@@ -14,21 +14,39 @@ import kotlin.math.sqrt
  */
 object SpeedLimit {
 
-    private const val ENDPOINT = "https://overpass-api.de/api/interpreter"
+    // Meerdere gratis servers; de hoofdserver is vaak overbelast
+    private val ENDPOINTS = listOf(
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+    )
+    private var next = 0
 
     /** Netwerkaanroep: niet op de hoofdthread aanroepen. Geeft null als het onbekend is. */
     fun lookup(lat: Double, lon: Double): Int? {
-        val query = "[out:json][timeout:8];way(around:30,$lat,$lon)[highway][~\"^maxspeed\"~\".\"];out tags geom;"
-        val conn = URL(ENDPOINT).openConnection() as HttpURLConnection
-        conn.connectTimeout = 6000
-        conn.readTimeout = 9000
-        conn.requestMethod = "POST"
-        conn.doOutput = true
-        conn.setRequestProperty("User-Agent", "Autoscherm/1.0 (persoonlijke auto-app)")
-        conn.outputStream.use { it.write(("data=" + URLEncoder.encode(query, "UTF-8")).toByteArray()) }
-        if (conn.responseCode != 200) return null
+        val query = "[out:json][timeout:6];way(around:30,$lat,$lon)[highway][~\"^maxspeed\"~\".\"];out tags geom;"
+        var lastError: Exception? = null
+        repeat(ENDPOINTS.size) {
+            val endpoint = ENDPOINTS[next % ENDPOINTS.size]
+            try {
+                return lookupAt(endpoint, query, lat, lon)
+            } catch (e: Exception) {
+                lastError = e
+                next++
+            }
+        }
+        throw lastError ?: IllegalStateException("Geen server bereikbaar")
+    }
+
+    private fun lookupAt(endpoint: String, query: String, lat: Double, lon: Double): Int? {
+        val conn = URL(endpoint + "?data=" + URLEncoder.encode(query, "UTF-8")).openConnection() as HttpURLConnection
+        conn.connectTimeout = 5000
+        conn.readTimeout = 7000
+        conn.setRequestProperty("User-Agent", "Autoscherm/1.0 (persoonlijke auto-app; github.com/KoenGoed/Carplay)")
+        conn.setRequestProperty("Accept", "application/json")
+        if (conn.responseCode != 200) throw IllegalStateException("Server gaf code ${conn.responseCode}")
         val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-        val elements = json.optJSONArray("elements") ?: return null
+        val elements = json.optJSONArray("elements") ?: throw IllegalStateException("Geen geldig antwoord")
 
         var bestDist = Double.MAX_VALUE
         var bestLimit: Int? = null

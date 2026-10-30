@@ -16,6 +16,8 @@ android {
         targetSdk = 34
         versionCode = buildNumber
         versionName = "1.$buildNumber"
+        // Alleen de processors van moderne telefoons; houdt de app kleiner
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     // Vaste sleutel: elke update moet met dezelfde sleutel ondertekend zijn,
@@ -44,4 +46,10 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     lint { abortOnError = false }
+}
+
+dependencies {
+    // Offline spraakherkenning voor "Hey Golf"
+    implementation("com.alphacephei:vosk-android:0.3.47@aar")
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
 }
