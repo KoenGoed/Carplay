@@ -1,2 +1,7 @@
 Nieuw in deze versie:
-- De microfoonknop valt niet meer half buiten beeld. Datum en versienummer staan nu klein op twee regels.
+- Snelheidsmeter met de maximumsnelheid van de weg waar je rijdt. Rijd je te hard, dan wordt je snelheid rood.
+- Parkeerplek: als je de carkit loskoppelt, onthoudt de app waar je auto staat. Tik op "Mijn auto" of zeg "waar staat mijn auto".
+- Groot belscherm in de auto met grote knoppen om op te nemen, te weigeren en op te hangen.
+- Nachtstand: na zonsondergang wordt het scherm vanzelf donkerder. Zeg "nachtstand aan", "uit" of "automatisch".
+
+Na het installeren vraagt de app een paar toestemmingen (locatie, telefoon). Tik steeds op Toestaan.

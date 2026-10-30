@@ -16,6 +16,9 @@ import android.provider.ContactsContract
 import android.provider.MediaStore
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -53,9 +56,15 @@ class MainActivity : Activity() {
         private const val SPOTIFY = "com.spotify.music"
         private const val MAPS = "com.google.android.apps.maps"
         const val EXTRA_LISTEN = "listen"
+
+        /** Staat het autoscherm nu in beeld? (gebruikt door het belscherm) */
+        @Volatile
+        var visible = false
         private const val REQ_SPEECH = 41
         private const val REQ_CONTACTS = 42
-        private const val REQ_BLUETOOTH = 43
+        private const val REQ_PERMS = 43
+        private const val DEFAULT_LAT = 52.3
+        private const val DEFAULT_LON = 5.3
         private const val RELEASES_URL = "https://api.github.com/repos/KoenGoed/Carplay/releases/latest"
     }
 
@@ -99,12 +108,29 @@ class MainActivity : Activity() {
     private lateinit var mediaHint: TextView
     private lateinit var btnPlay: ImageButton
     private lateinit var updateBanner: TextView
+    private lateinit var speedValue: TextView
+    private lateinit var speedLimit: TextView
+    private lateinit var destCarInfo: TextView
+
+    // Snelheid en maximumsnelheid
+    private val locationListener = LocationListener { loc: Location -> onLocation(loc) }
+    private var locating = false
+    private var lastSaved = 0L
+    private var limitLookupBusy = false
+    private var lastLimitLoc: Location? = null
+    private var lastLimitTime = 0L
+    private var currentLimit: Int? = null
+    private var currentSpeed: Int? = null
+
+    // Nachtstand
+    private var nightOn: Boolean? = null
 
     private val clockTick = object : Runnable {
         override fun run() {
             val now = Date()
             clock.text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
             date.text = SimpleDateFormat("EEEE d MMMM", Locale("nl", "NL")).format(now) + versionLabel
+            applyNight()
             handler.postDelayed(this, 10_000)
         }
     }
@@ -137,6 +163,10 @@ class MainActivity : Activity() {
         mediaHint = findViewById(R.id.mediaHint)
         btnPlay = findViewById(R.id.btnPlay)
         updateBanner = findViewById(R.id.updateBanner)
+        speedValue = findViewById(R.id.speedValue)
+        speedLimit = findViewById(R.id.speedLimit)
+        destCarInfo = findViewById(R.id.destCarInfo)
+        findViewById<View>(R.id.destCar).setOnClickListener { walkToCar() }
 
         setupTiles()
         setupDestinations()
@@ -145,14 +175,25 @@ class MainActivity : Activity() {
         setupUpdates()
         handleListenExtra(intent)
         versionLabel = try { "\nversie " + packageManager.getPackageInfo(packageName, 0).versionName } catch (e: Exception) { "" }
-        askBluetoothPermission()
+        askPermissions()
     }
 
-    /** Nodig om de naam van je carkit te kunnen lezen (Android 12 en nieuwer). */
-    private fun askBluetoothPermission() {
-        if (Build.VERSION.SDK_INT >= 31 && !hasPerm(Manifest.permission.BLUETOOTH_CONNECT)) {
-            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQ_BLUETOOTH)
-        }
+    /**
+     * Eén keer alle toestemmingen vragen die nog ontbreken:
+     * carkit herkennen, snelheid en parkeerplek (locatie), en het belscherm (telefoon, oproeplijst).
+     */
+    private fun askPermissions() {
+        val wanted = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_CALL_LOG,
+            Manifest.permission.ANSWER_PHONE_CALLS,
+            Manifest.permission.READ_CONTACTS,
+        )
+        if (Build.VERSION.SDK_INT >= 31) wanted += Manifest.permission.BLUETOOTH_CONNECT
+        val missing = wanted.filter { !hasPerm(it) }
+        if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), REQ_PERMS)
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -164,8 +205,12 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         // Terug in het autoscherm: zwevende knop weg
+        visible = true
         handler.removeCallbacks(stopBubble)
         handler.postDelayed(stopBubble, 1200)
+        startLocation()
+        refreshCarTile()
+        applyNight()
         handler.post(clockTick)
         connectMedia()
         hideSystemBars()
@@ -176,6 +221,8 @@ class MainActivity : Activity() {
         super.onPause()
         handler.removeCallbacks(clockTick)
         handler.removeCallbacks(stopBubble)
+        visible = false
+        stopLocation()
     }
 
     override fun onDestroy() {
@@ -467,6 +514,25 @@ class MainActivity : Activity() {
         fun after(prefixes: List<String>): String? =
             prefixes.firstOrNull { t.startsWith(it) }?.let { t.removePrefix(it).trim() }
 
+        // Parkeerplek
+        if (t.contains("mijn auto") || t.contains("geparkeerd") || t.contains("parkeerplek")) {
+            walkToCar(); return
+        }
+
+        // Nachtstand
+        if (t.startsWith("nachtstand") || t.startsWith("nachtmodus")) {
+            val mode = when {
+                t.contains("uit") -> "off"
+                t.contains("aan") -> "on"
+                else -> "auto"
+            }
+            prefs.edit().putString("night_mode", mode).apply()
+            nightOn = null
+            applyNight()
+            say(when (mode) { "on" -> "Nachtstand aan"; "off" -> "Nachtstand uit"; else -> "Nachtstand automatisch" })
+            return
+        }
+
         // Bellen
         after(listOf("bel naar ", "bellen naar ", "bel ", "telefoneer "))?.let { name ->
             callContact(name.removeSuffix(" op").trim()); return
@@ -560,6 +626,7 @@ class MainActivity : Activity() {
             return
         }
         val (name, number) = match
+        prefs.edit().putString("last_called_name", name).putString("last_called_number", number).apply()
         say("Ik bel $name")
         val uri = Uri.parse("tel:" + Uri.encode(number))
         val call = if (hasPerm(Manifest.permission.CALL_PHONE)) Intent(Intent.ACTION_CALL, uri) else Intent(Intent.ACTION_DIAL, uri)
@@ -568,6 +635,10 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_PERMS) {
+            startLocation()
+            return
+        }
         if (requestCode != REQ_CONTACTS) return
         val name = pendingCall ?: return
         pendingCall = null
@@ -734,5 +805,132 @@ class MainActivity : Activity() {
         } catch (e: Exception) {
             Toast.makeText(this, "Installeren lukte niet: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    // ---------- Snelheid en maximumsnelheid ----------
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun startLocation() {
+        if (locating || !hasPerm(Manifest.permission.ACCESS_FINE_LOCATION)) return
+        try {
+            getSystemService(LocationManager::class.java)
+                .requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, locationListener, Looper.getMainLooper())
+            locating = true
+        } catch (ignored: Exception) { }
+    }
+
+    private fun stopLocation() {
+        if (!locating) return
+        try { getSystemService(LocationManager::class.java).removeUpdates(locationListener) } catch (ignored: Exception) { }
+        locating = false
+    }
+
+    private fun onLocation(loc: Location) {
+        if (loc.time - lastSaved > 10_000) {
+            LocationStore.saveLast(this, loc)
+            lastSaved = loc.time
+        }
+        val kmh = if (loc.hasSpeed()) Math.round(loc.speed * 3.6f) else null
+        currentSpeed = if (kmh != null && kmh < 3) 0 else kmh
+        speedValue.text = currentSpeed?.toString() ?: "–"
+        maybeLookupLimit(loc)
+        colorSpeed()
+    }
+
+    private fun maybeLookupLimit(loc: Location) {
+        if (limitLookupBusy) return
+        val prev = lastLimitLoc
+        val now = System.currentTimeMillis()
+        val moved = prev == null || prev.distanceTo(loc) > 120
+        val stale = now - lastLimitTime > 30_000
+        if (!moved && !stale) return
+        if (prev != null && (currentSpeed ?: 0) < 5 && !stale) return
+        limitLookupBusy = true
+        lastLimitLoc = loc
+        lastLimitTime = now
+        val lat = loc.latitude
+        val lon = loc.longitude
+        Thread {
+            var result: Int? = null
+            var ok = true
+            try {
+                result = SpeedLimit.lookup(lat, lon)
+            } catch (e: Exception) {
+                ok = false
+            }
+            runOnUiThread {
+                limitLookupBusy = false
+                if (ok) {
+                    currentLimit = result
+                    showLimit()
+                }
+            }
+        }.start()
+    }
+
+    private fun showLimit() {
+        val limit = currentLimit
+        if (limit == null) {
+            speedLimit.visibility = View.INVISIBLE
+        } else {
+            speedLimit.text = limit.toString()
+            speedLimit.visibility = View.VISIBLE
+        }
+        colorSpeed()
+    }
+
+    private fun colorSpeed() {
+        val limit = currentLimit
+        val speed = currentSpeed
+        val tooFast = limit != null && speed != null && speed > limit + 3
+        speedValue.setTextColor(if (tooFast) 0xFFFF4D4D.toInt() else getColor(R.color.fg))
+    }
+
+    // ---------- Parkeerplek ----------
+
+    private fun refreshCarTile() {
+        val p = LocationStore.parked(this)
+        destCarInfo.text = if (p == null) {
+            "Onthoud ik als je uitstapt"
+        } else {
+            val sameDay = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).let { it.format(Date(p.time)) == it.format(Date()) }
+            val fmt = if (sameDay) "'Geparkeerd om' HH:mm" else "'Geparkeerd' d MMM HH:mm"
+            SimpleDateFormat(fmt, Locale("nl", "NL")).format(Date(p.time))
+        }
+    }
+
+    private fun walkToCar() {
+        val p = LocationStore.parked(this)
+        if (p == null) {
+            say("Ik weet nog niet waar je auto staat. Dat onthoud ik zodra je de carkit loskoppelt.")
+            return
+        }
+        say("Ik loop met je mee naar je auto")
+        val walk = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=${p.lat},${p.lon}&mode=w")).setPackage(MAPS)
+        val map = Intent(Intent.ACTION_VIEW, Uri.parse("geo:${p.lat},${p.lon}?q=${p.lat},${p.lon}(Mijn auto)"))
+        try {
+            startActivity(if (walk.resolveActivity(packageManager) != null) walk else map)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Kon de kaart niet openen", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ---------- Nachtstand ----------
+
+    private fun applyNight() {
+        val dark = when (prefs.getString("night_mode", "auto")) {
+            "on" -> true
+            "off" -> false
+            else -> {
+                val spot = LocationStore.last(this)
+                Sun.isDark(spot?.lat ?: DEFAULT_LAT, spot?.lon ?: DEFAULT_LON)
+            }
+        }
+        if (dark == nightOn) return
+        nightOn = dark
+        val lp = window.attributes
+        lp.screenBrightness = if (dark) 0.06f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        window.attributes = lp
+        findViewById<View>(android.R.id.content).alpha = if (dark) 0.75f else 1f
     }
 }

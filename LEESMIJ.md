@@ -12,6 +12,8 @@ Tik op de oranje microfoon, of houd het zwevende autoknopje lang ingedrukt. Voor
 - "open Flitsmeister", "zet WhatsApp aan", "Spotify"
 - "rij naar huis", "navigeer naar school", "rij naar Albert Heijn Lelystad"
 - "speel Racoon", "pauze", "volgende", "vorige", "muziek aan"
+- "waar staat mijn auto"
+- "nachtstand aan", "nachtstand uit", "nachtstand automatisch"
 
 ## Updates
 
