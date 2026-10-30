@@ -1,7 +1,5 @@
 Nieuw in deze versie:
-- Snelheidsmeter met de maximumsnelheid van de weg waar je rijdt. Rijd je te hard, dan wordt je snelheid rood.
-- Parkeerplek: als je de carkit loskoppelt, onthoudt de app waar je auto staat. Tik op "Mijn auto" of zeg "waar staat mijn auto".
-- Groot belscherm in de auto met grote knoppen om op te nemen, te weigeren en op te hangen.
-- Nachtstand: na zonsondergang wordt het scherm vanzelf donkerder. Zeg "nachtstand aan", "uit" of "automatisch".
-
-Na het installeren vraagt de app een paar toestemmingen (locatie, telefoon). Tik steeds op Toestaan.
+- Vier tabbladen onderaan: Rijden, Muziek, Apps en Plekken. Tik op een tabblad of veeg naar links of rechts.
+- Rijden: grote snelheidsmeter met maximumsnelheid, plus een klein muziekblok met afspelen en volgende.
+- Apps: kleinere, nettere knoppen.
+- Plekken: Thuis, je tweede plek en Mijn auto. De tweede plek heet nu "Werk", maar die naam kies je zelf: houd hem lang ingedrukt om naam en adres te wijzigen.

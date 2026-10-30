@@ -1,338 +1,158 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/bg"
-    android:orientation="vertical"
-    android:padding="14dp">
-    <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="8dp"
-            android:paddingBottom="10dp">
-            <TextView
-                android:id="@+id/clock"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-condensed"
-                android:textColor="@color/fg"
-                android:textSize="46sp"
-                android:textStyle="bold" />
-            <TextView
-                android:id="@+id/date"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="14dp"
-                android:layout_marginEnd="8dp"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:lineSpacingExtra="2dp"
-                android:maxLines="2"
-                android:textColor="@color/muted"
-                android:textSize="15sp" />
-            <TextView
-                android:id="@+id/updateBanner"
-                android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:layout_marginEnd="12dp"
-                android:layout_marginBottom="6dp"
-                android:background="@drawable/bg_chip"
-                android:gravity="center"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:text="Update klaar"
-                android:textColor="@color/amber_ink"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
-            <ImageButton
-                android:id="@+id/btnMic"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:minWidth="64dp"
-                android:background="@drawable/bg_round_amber"
-                android:contentDescription="Spraakopdracht geven"
-                android:padding="16dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_mic" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@color/bg" android:orientation="vertical" android:padding="12dp">
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="8dp" android:paddingBottom="10dp">
+            <TextView android:id="@+id/clock" android:layout_width="wrap_content" android:layout_height="wrap_content" android:fontFamily="sans-serif-condensed" android:textColor="@color/fg" android:textSize="46sp" android:textStyle="bold"/>
+            <TextView android:id="@+id/date" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_marginEnd="8dp" android:layout_weight="1" android:ellipsize="end" android:lineSpacingExtra="2dp" android:maxLines="2" android:textColor="@color/muted" android:textSize="15sp"/>
+            <TextView android:id="@+id/updateBanner" android:layout_width="wrap_content" android:layout_height="48dp" android:layout_marginEnd="12dp" android:layout_marginBottom="6dp" android:background="@drawable/bg_chip" android:gravity="center" android:paddingStart="16dp" android:paddingEnd="16dp" android:text="Update klaar" android:textColor="@color/amber_ink" android:textSize="16sp" android:textStyle="bold" android:visibility="gone"/>
+            <ImageButton android:id="@+id/btnMic" android:layout_width="64dp" android:layout_height="64dp" android:minWidth="64dp" android:background="@drawable/bg_round_amber" android:contentDescription="Spraakopdracht geven" android:padding="16dp" android:scaleType="fitCenter" android:src="@drawable/ic_mic"/>
         </LinearLayout>
-    <LinearLayout
-            android:id="@+id/mediaCard"
-            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1.25" android:layout_marginTop="0dp"
-            android:background="@drawable/bg_card"
-            android:orientation="vertical"
-            android:padding="20dp">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:letterSpacing="0.12"
-                android:text="NU SPEELT"
-                android:textColor="@color/muted"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_marginTop="12dp"
-                android:layout_weight="1"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-                <ImageView
-                    android:id="@+id/albumArt"
-                    android:layout_width="130dp"
-                    android:layout_height="130dp"
-                    android:background="@drawable/bg_tile"
-                    android:clipToOutline="true"
-                    android:importantForAccessibility="no"
-                    android:padding="0dp"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/ic_music" />
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="18dp"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-                    <TextView
-                        android:id="@+id/trackTitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:maxLines="2"
-                        android:textColor="@color/fg"
-                        android:textSize="24sp"
-                        android:textStyle="bold" />
-                    <TextView
-                        android:id="@+id/trackArtist"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:ellipsize="end"
-                        android:maxLines="2"
-                        android:textColor="@color/muted"
-                        android:textSize="18sp" />
+
+    <FrameLayout android:id="@+id/pages" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+
+        <!-- Tab 1: Rijden (richting van de rij wordt in de code gekozen: naast elkaar liggend, onder elkaar staand) -->
+        <LinearLayout android:id="@+id/pageDrive" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
+            <LinearLayout android:id="@+id/speedCard" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1.3"
+                android:background="@drawable/bg_card" android:gravity="center" android:orientation="horizontal" android:padding="16dp">
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center_horizontal" android:orientation="vertical">
+                    <TextView android:id="@+id/speedValue" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-condensed" android:fontFeatureSettings="tnum" android:includeFontPadding="false"
+                        android:text="–" android:textColor="@color/fg" android:textSize="88sp" android:textStyle="bold"/>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="km/u"
+                        android:textColor="@color/muted" android:textSize="18sp"/>
+                </LinearLayout>
+                <TextView android:id="@+id/speedLimit" android:layout_width="96dp" android:layout_height="96dp" android:layout_marginStart="36dp"
+                    android:background="@drawable/bg_limit" android:fontFamily="sans-serif-condensed" android:gravity="center"
+                    android:textColor="#111111" android:textSize="38sp" android:textStyle="bold" android:visibility="invisible"/>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/miniPlayer" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+                android:layout_marginTop="12dp" android:background="@drawable/bg_card" android:gravity="center_vertical"
+                android:orientation="horizontal" android:padding="16dp">
+                <ImageView android:id="@+id/miniArt" android:layout_width="72dp" android:layout_height="72dp" android:background="@drawable/bg_tile"
+                    android:clipToOutline="true" android:importantForAccessibility="no" android:scaleType="centerCrop" android:src="@drawable/ic_music"/>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:id="@+id/miniTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end"
+                        android:maxLines="1" android:text="Muziek" android:textColor="@color/fg" android:textSize="19sp" android:textStyle="bold"/>
+                    <TextView android:id="@+id/miniArtist" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end"
+                        android:maxLines="1" android:textColor="@color/muted" android:textSize="15sp"/>
+                </LinearLayout>
+                <ImageButton android:id="@+id/miniPlay" android:layout_width="64dp" android:layout_height="64dp" android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_round_amber" android:contentDescription="Afspelen of pauzeren" android:padding="16dp"
+                    android:scaleType="fitCenter" android:src="@drawable/ic_play"/>
+                <ImageButton android:id="@+id/miniNext" android:layout_width="56dp" android:layout_height="56dp" android:layout_marginStart="10dp"
+                    android:background="@drawable/bg_round_dark" android:contentDescription="Volgende" android:padding="15dp"
+                    android:scaleType="fitCenter" android:src="@drawable/ic_next"/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Tab 2: Muziek -->
+        <LinearLayout android:id="@+id/mediaCard" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_card" android:orientation="vertical" android:padding="20dp" android:visibility="gone">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:letterSpacing="0.12" android:text="NU SPEELT" android:textColor="@color/muted" android:textSize="13sp" android:textStyle="bold"/>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_marginTop="12dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="horizontal">
+                <ImageView android:id="@+id/albumArt" android:layout_width="130dp" android:layout_height="130dp" android:background="@drawable/bg_tile" android:clipToOutline="true" android:importantForAccessibility="no" android:padding="0dp" android:scaleType="centerCrop" android:src="@drawable/ic_music"/>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="18dp" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:id="@+id/trackTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:maxLines="2" android:textColor="@color/fg" android:textSize="24sp" android:textStyle="bold"/>
+                    <TextView android:id="@+id/trackArtist" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:ellipsize="end" android:maxLines="2" android:textColor="@color/muted" android:textSize="18sp"/>
                 </LinearLayout>
             </LinearLayout>
-            <TextView
-                android:id="@+id/mediaHint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/bg_tile"
-                android:padding="12dp"
-                android:text="Tik hier om songtitels en hoesjes te tonen (eenmalig instellen)"
-                android:textColor="@color/amber"
-                android:textSize="15sp"
-                android:visibility="gone" />
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:gravity="center"
-                android:orientation="horizontal">
-                <ImageButton
-                    android:id="@+id/btnPrev"
-                    android:layout_width="76dp"
-                    android:layout_height="76dp"
-                    android:background="@drawable/bg_round_dark"
-                    android:contentDescription="Vorige"
-                    android:padding="20dp"
-                    android:scaleType="fitCenter"
-                    android:src="@drawable/ic_prev" />
-                <ImageButton
-                    android:id="@+id/btnPlay"
-                    android:layout_width="96dp"
-                    android:layout_height="96dp"
-                    android:layout_marginStart="28dp"
-                    android:layout_marginEnd="28dp"
-                    android:background="@drawable/bg_round_amber"
-                    android:contentDescription="Afspelen of pauzeren"
-                    android:padding="24dp"
-                    android:scaleType="fitCenter"
-                    android:src="@drawable/ic_play" />
-                <ImageButton
-                    android:id="@+id/btnNext"
-                    android:layout_width="76dp"
-                    android:layout_height="76dp"
-                    android:background="@drawable/bg_round_dark"
-                    android:contentDescription="Volgende"
-                    android:padding="20dp"
-                    android:scaleType="fitCenter"
-                    android:src="@drawable/ic_next" />
+            <TextView android:id="@+id/mediaHint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_tile" android:padding="12dp" android:text="Tik hier om songtitels en hoesjes te tonen (eenmalig instellen)" android:textColor="@color/amber" android:textSize="15sp" android:visibility="gone"/>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:gravity="center" android:orientation="horizontal">
+                <ImageButton android:id="@+id/btnPrev" android:layout_width="76dp" android:layout_height="76dp" android:background="@drawable/bg_round_dark" android:contentDescription="Vorige" android:padding="20dp" android:scaleType="fitCenter" android:src="@drawable/ic_prev"/>
+                <ImageButton android:id="@+id/btnPlay" android:layout_width="96dp" android:layout_height="96dp" android:layout_marginStart="28dp" android:layout_marginEnd="28dp" android:background="@drawable/bg_round_amber" android:contentDescription="Afspelen of pauzeren" android:padding="24dp" android:scaleType="fitCenter" android:src="@drawable/ic_play"/>
+                <ImageButton android:id="@+id/btnNext" android:layout_width="76dp" android:layout_height="76dp" android:background="@drawable/bg_round_dark" android:contentDescription="Volgende" android:padding="20dp" android:scaleType="fitCenter" android:src="@drawable/ic_next"/>
             </LinearLayout>
         </LinearLayout>
-    <LinearLayout
-            android:id="@+id/speedCard"
-            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="0.4" android:layout_marginTop="12dp"
-            android:background="@drawable/bg_card"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="22dp"
-            android:paddingEnd="14dp">
-            <TextView
-                android:id="@+id/speedValue"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-condensed"
-                android:fontFeatureSettings="tnum"
-                android:text="–"
-                android:textColor="@color/fg"
-                android:textSize="42sp"
-                android:textStyle="bold" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="km/u"
-                android:textColor="@color/muted"
-                android:textSize="17sp" />
-            <View
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
-            <TextView
-                android:id="@+id/speedLimit"
-                android:layout_width="58dp"
-                android:layout_height="58dp"
-                android:background="@drawable/bg_limit"
-                android:fontFamily="sans-serif-condensed"
-                android:gravity="center"
-                android:textColor="#111111"
-                android:textSize="24sp"
-                android:textStyle="bold"
-                android:visibility="invisible" />
-        </LinearLayout>
-        <LinearLayout
-            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="0.4" android:layout_marginTop="12dp"
-            android:orientation="horizontal">
-            <LinearLayout
-                android:id="@+id/destHome"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginEnd="6dp"
-                android:background="@drawable/bg_tile"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?android:attr/selectableItemBackground"
-                android:gravity="center_vertical"
-                android:orientation="vertical"
-                android:paddingStart="18dp"
-                android:paddingEnd="18dp">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Thuis"
-                    android:textColor="@color/go"
-                    android:textSize="22sp"
-                    android:textStyle="bold" />
-                <TextView
-                    android:id="@+id/destHomeAddr"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textColor="@color/muted"
-                    android:textSize="14sp" />
+
+        <!-- Tab 3: Apps -->
+        <ScrollView android:id="@+id/pageApps" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <include android:id="@+id/tileSpotify" layout="@layout/tile" android:layout_width="0dp" android:layout_height="118dp"
+        android:layout_weight="1" android:layout_marginStart="5dp" android:layout_marginEnd="5dp"/>
+                <include android:id="@+id/tileMaps" layout="@layout/tile" android:layout_width="0dp" android:layout_height="118dp"
+        android:layout_weight="1" android:layout_marginStart="5dp" android:layout_marginEnd="5dp"/>
+                <include android:id="@+id/tileFlits" layout="@layout/tile" android:layout_width="0dp" android:layout_height="118dp"
+        android:layout_weight="1" android:layout_marginStart="5dp" android:layout_marginEnd="5dp"/>
+                <include android:id="@+id/tileWhatsapp" layout="@layout/tile" android:layout_width="0dp" android:layout_height="118dp"
+        android:layout_weight="1" android:layout_marginStart="5dp" android:layout_marginEnd="5dp"/>
             </LinearLayout>
-            <LinearLayout
-                android:id="@+id/destWork"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginStart="6dp"
-                android:background="@drawable/bg_tile"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?android:attr/selectableItemBackground"
-                android:gravity="center_vertical"
-                android:orientation="vertical"
-                android:paddingStart="18dp"
-                android:paddingEnd="18dp">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="School / werk"
-                    android:textColor="@color/go"
-                    android:textSize="22sp"
-                    android:textStyle="bold" />
-                <TextView
-                    android:id="@+id/destWorkAddr"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textColor="@color/muted"
-                    android:textSize="14sp" />
+        </ScrollView>
+
+        <!-- Tab 4: Plekken -->
+        <ScrollView android:id="@+id/pagePlaces" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <LinearLayout android:id="@+id/destHome" android:layout_width="match_parent" android:layout_height="84dp" android:layout_marginBottom="10dp"
+        android:background="@drawable/bg_tile" android:clickable="true" android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground" android:gravity="center_vertical" android:orientation="horizontal"
+        android:paddingStart="20dp" android:paddingEnd="20dp">
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+            <TextView  android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Thuis"
+                android:textColor="@color/go" android:textSize="21sp" android:textStyle="bold"/>
+            <TextView android:id="@+id/destHomeAddr" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:ellipsize="end" android:maxLines="1" android:text="Lang indrukken om adres in te stellen" android:textColor="@color/muted" android:textSize="14sp"/>
+        </LinearLayout>
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="›" android:textColor="@color/muted" android:textSize="30sp"/>
+    </LinearLayout>
+                <LinearLayout android:id="@+id/destWork" android:layout_width="match_parent" android:layout_height="84dp" android:layout_marginBottom="10dp"
+        android:background="@drawable/bg_tile" android:clickable="true" android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground" android:gravity="center_vertical" android:orientation="horizontal"
+        android:paddingStart="20dp" android:paddingEnd="20dp">
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+            <TextView android:id="@+id/destWorkName" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Werk"
+                android:textColor="@color/go" android:textSize="21sp" android:textStyle="bold"/>
+            <TextView android:id="@+id/destWorkAddr" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:ellipsize="end" android:maxLines="1" android:text="Lang indrukken om in te stellen" android:textColor="@color/muted" android:textSize="14sp"/>
+        </LinearLayout>
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="›" android:textColor="@color/muted" android:textSize="30sp"/>
+    </LinearLayout>
+                <LinearLayout android:id="@+id/destCar" android:layout_width="match_parent" android:layout_height="84dp" android:layout_marginBottom="10dp"
+        android:background="@drawable/bg_tile" android:clickable="true" android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground" android:gravity="center_vertical" android:orientation="horizontal"
+        android:paddingStart="20dp" android:paddingEnd="20dp">
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+            <TextView  android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Mijn auto"
+                android:textColor="@color/amber" android:textSize="21sp" android:textStyle="bold"/>
+            <TextView android:id="@+id/destCarInfo" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:ellipsize="end" android:maxLines="1" android:text="Onthoud ik als je uitstapt" android:textColor="@color/muted" android:textSize="14sp"/>
+        </LinearLayout>
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="›" android:textColor="@color/muted" android:textSize="30sp"/>
+    </LinearLayout>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="6dp" android:paddingTop="4dp"
+                    android:text="Tik om te navigeren. Houd lang ingedrukt om de naam of het adres te wijzigen."
+                    android:textColor="@color/muted" android:textSize="13sp"/>
             </LinearLayout>
-            <LinearLayout
-                android:id="@+id/destCar"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginStart="12dp"
-                android:background="@drawable/bg_tile"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?android:attr/selectableItemBackground"
-                android:gravity="center_vertical"
-                android:orientation="vertical"
-                android:paddingStart="18dp"
-                android:paddingEnd="18dp">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Mijn auto"
-                    android:textColor="@color/amber"
-                    android:textSize="22sp"
-                    android:textStyle="bold" />
-                <TextView
-                    android:id="@+id/destCarInfo"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:text="Nog niet geparkeerd"
-                    android:textColor="@color/muted"
-                    android:textSize="14sp" />
-            </LinearLayout>
-        </LinearLayout>
-    <LinearLayout
-            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="0.75" android:layout_marginTop="12dp"
-            android:orientation="horizontal">
-            <include
-                android:id="@+id/tileSpotify"
-                layout="@layout/tile"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginEnd="6dp"
-                android:layout_weight="1" />
-            <include
-                android:id="@+id/tileMaps"
-                layout="@layout/tile"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="6dp"
-                android:layout_weight="1" />
-        </LinearLayout>
-    <LinearLayout
-            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="0.75" android:layout_marginTop="12dp"
-            android:orientation="horizontal">
-            <include
-                android:id="@+id/tileFlits"
-                layout="@layout/tile"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginEnd="6dp"
-                android:layout_weight="1" />
-            <include
-                android:id="@+id/tileWhatsapp"
-                layout="@layout/tile"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="6dp"
-                android:layout_weight="1" />
-        </LinearLayout>
+        </ScrollView>
+    </FrameLayout>
+
+    <LinearLayout android:id="@+id/tabBar" android:layout_width="match_parent" android:layout_height="64dp" android:layout_marginTop="10dp"
+        android:background="@drawable/bg_card" android:orientation="horizontal">
+        <LinearLayout android:id="@+id/tabDrive" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+        android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground" android:contentDescription="Rijden">
+        <ImageView android:id="@+id/tabDriveIcon" android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_speed" android:importantForAccessibility="no"/>
+        <TextView android:id="@+id/tabDriveLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+            android:text="Rijden" android:textColor="@color/muted" android:textSize="12sp" android:textStyle="bold"/>
+    </LinearLayout>
+        <LinearLayout android:id="@+id/tabMusic" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+        android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground" android:contentDescription="Muziek">
+        <ImageView android:id="@+id/tabMusicIcon" android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_music" android:importantForAccessibility="no"/>
+        <TextView android:id="@+id/tabMusicLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+            android:text="Muziek" android:textColor="@color/muted" android:textSize="12sp" android:textStyle="bold"/>
+    </LinearLayout>
+        <LinearLayout android:id="@+id/tabApps" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+        android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground" android:contentDescription="Apps">
+        <ImageView android:id="@+id/tabAppsIcon" android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_apps" android:importantForAccessibility="no"/>
+        <TextView android:id="@+id/tabAppsLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+            android:text="Apps" android:textColor="@color/muted" android:textSize="12sp" android:textStyle="bold"/>
+    </LinearLayout>
+        <LinearLayout android:id="@+id/tabPlaces" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+        android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground" android:contentDescription="Plekken">
+        <ImageView android:id="@+id/tabPlacesIcon" android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_place" android:importantForAccessibility="no"/>
+        <TextView android:id="@+id/tabPlacesLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+            android:text="Plekken" android:textColor="@color/muted" android:textSize="12sp" android:textStyle="bold"/>
+    </LinearLayout>
+    </LinearLayout>
 </LinearLayout>

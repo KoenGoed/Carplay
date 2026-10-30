@@ -16,7 +16,11 @@ import android.provider.ContactsContract
 import android.provider.MediaStore
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
+import android.content.res.Configuration
 import android.location.Location
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.widget.LinearLayout
 import android.location.LocationListener
 import android.location.LocationManager
 import org.json.JSONObject
@@ -125,6 +129,12 @@ class MainActivity : Activity() {
     // Nachtstand
     private var nightOn: Boolean? = null
 
+    // Tabbladen
+    private lateinit var pages: List<View>
+    private lateinit var tabs: List<View>
+    private var currentTab = 0
+    private lateinit var gestures: GestureDetector
+
     private val clockTick = object : Runnable {
         override fun run() {
             val now = Date()
@@ -173,6 +183,8 @@ class MainActivity : Activity() {
         setupMediaButtons()
         setupVoice()
         setupUpdates()
+        setupTabs()
+        arrangeDrivePage()
         handleListenExtra(intent)
         versionLabel = try { "\nversie " + packageManager.getPackageInfo(packageName, 0).versionName } catch (e: Exception) { "" }
         askPermissions()
@@ -329,38 +341,58 @@ class MainActivity : Activity() {
     // ---------- Vaste bestemmingen ----------
 
     private fun setupDestinations() {
-        bindDestination(R.id.destHome, R.id.destHomeAddr, "dest_home", "Thuis")
-        bindDestination(R.id.destWork, R.id.destWorkAddr, "dest_work", "School / werk")
+        bindDestination(R.id.destHome, R.id.destHomeAddr, "dest_home", null, "Thuis")
+        bindDestination(R.id.destWork, R.id.destWorkAddr, "dest_work", R.id.destWorkName, "Werk")
     }
 
-    private fun bindDestination(boxId: Int, addrId: Int, key: String, name: String) {
+    /** Naam van de tweede vaste plek; die kies je zelf (bijv. Werk, School, Stage). */
+    private fun workName() = prefs.getString("dest_work_name", null)?.takeIf { it.isNotBlank() } ?: "Werk"
+
+    private fun bindDestination(boxId: Int, addrId: Int, key: String, nameId: Int?, defaultName: String) {
         val box = findViewById<View>(boxId)
         val addrView = findViewById<TextView>(addrId)
+        val nameView = nameId?.let { findViewById<TextView>(it) }
+        fun name() = if (nameView != null) workName() else defaultName
         fun refresh() {
-            addrView.text = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: "Lang indrukken om adres in te stellen"
+            nameView?.text = name()
+            addrView.text = prefs.getString(key, null)?.takeIf { it.isNotBlank() } ?: "Lang indrukken om in te stellen"
         }
         refresh()
         box.setOnClickListener {
             val addr = prefs.getString(key, null)
-            if (addr.isNullOrBlank()) editDestination(key, name) { refresh() } else navigateTo(addr)
+            if (addr.isNullOrBlank()) editDestination(key, name(), nameView != null) { refresh() } else navigateTo(addr)
         }
         box.setOnLongClickListener {
-            editDestination(key, name) { refresh() }
+            editDestination(key, name(), nameView != null) { refresh() }
             true
         }
     }
 
-    private fun editDestination(key: String, name: String, done: () -> Unit) {
-        val input = EditText(this).apply {
+    private fun editDestination(key: String, name: String, nameEditable: Boolean, done: () -> Unit) {
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val form = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+        }
+        val nameInput = EditText(this).apply {
+            setText(name)
+            hint = "Naam, bijv. Werk of School"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
+        val addrInput = EditText(this).apply {
             setText(prefs.getString(key, ""))
             hint = "Straat en plaats"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS
         }
+        if (nameEditable) form.addView(nameInput)
+        form.addView(addrInput)
         AlertDialog.Builder(this)
-            .setTitle("Adres voor $name")
-            .setView(input)
+            .setTitle(if (nameEditable) "Plek wijzigen" else "Adres voor $name")
+            .setView(form)
             .setPositiveButton("Opslaan") { _, _ ->
-                prefs.edit().putString(key, input.text.toString().trim()).apply()
+                val edit = prefs.edit().putString(key, addrInput.text.toString().trim())
+                if (nameEditable) edit.putString("dest_work_name", nameInput.text.toString().trim())
+                edit.apply()
                 done()
             }
             .setNegativeButton("Annuleren", null)
@@ -425,6 +457,7 @@ class MainActivity : Activity() {
             }
             albumArt.setImageResource(R.drawable.ic_music)
             btnPlay.setImageResource(R.drawable.ic_play)
+            syncMini()
             return
         }
         trackTitle.text = meta.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "Onbekend nummer"
@@ -434,6 +467,15 @@ class MainActivity : Activity() {
             ?: meta.getBitmap(MediaMetadata.METADATA_KEY_ART)
         if (art != null) albumArt.setImageBitmap(art) else albumArt.setImageResource(R.drawable.ic_music)
         btnPlay.setImageResource(if (isPlaying()) R.drawable.ic_pause else R.drawable.ic_play)
+        syncMini()
+    }
+
+    /** Het kleine muziekblok op het tabblad Rijden volgt het grote. */
+    private fun syncMini() {
+        findViewById<TextView>(R.id.miniTitle).text = trackTitle.text
+        findViewById<TextView>(R.id.miniArtist).text = trackArtist.text
+        findViewById<ImageView>(R.id.miniArt).setImageDrawable(albumArt.drawable?.constantState?.newDrawable(resources) ?: albumArt.drawable)
+        findViewById<ImageButton>(R.id.miniPlay).setImageResource(if (isPlaying()) R.drawable.ic_pause else R.drawable.ic_play)
     }
 
     private fun isPlaying() = controller?.playbackState?.state == PlaybackState.STATE_PLAYING
@@ -449,6 +491,8 @@ class MainActivity : Activity() {
         findViewById<ImageButton>(R.id.btnNext).setOnClickListener {
             controller?.transportControls?.skipToNext() ?: sendMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
         }
+        findViewById<ImageButton>(R.id.miniPlay).setOnClickListener { btnPlay.performClick() }
+        findViewById<ImageButton>(R.id.miniNext).setOnClickListener { findViewById<ImageButton>(R.id.btnNext).performClick() }
         btnPlay.setOnClickListener {
             val c = controller
             when {
@@ -544,8 +588,8 @@ class MainActivity : Activity() {
             val target = navTarget ?: "huis"
             when (target) {
                 "huis", "thuis", "mijn huis" -> navigateSaved("dest_home", "Thuis")
-                "school", "werk", "mijn werk", "de school" -> navigateSaved("dest_work", "School / werk")
-                else -> { say("Route naar $target"); navigateTo(target) }
+                "school", "werk", "mijn werk", "de school" -> navigateSaved("dest_work", workName())
+                else -> if (target == workName().lowercase(Locale("nl", "NL"))) navigateSaved("dest_work", workName()) else { say("Route naar $target"); navigateTo(target) }
             }
             return
         }
@@ -932,5 +976,94 @@ class MainActivity : Activity() {
         lp.screenBrightness = if (dark) 0.06f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
         window.attributes = lp
         findViewById<View>(android.R.id.content).alpha = if (dark) 0.75f else 1f
+    }
+
+    // ---------- Tabbladen ----------
+
+    private fun setupTabs() {
+        pages = listOf(
+            findViewById(R.id.pageDrive),
+            findViewById(R.id.mediaCard),
+            findViewById(R.id.pageApps),
+            findViewById(R.id.pagePlaces),
+        )
+        tabs = listOf(
+            findViewById(R.id.tabDrive),
+            findViewById(R.id.tabMusic),
+            findViewById(R.id.tabApps),
+            findViewById(R.id.tabPlaces),
+        )
+        tabs.forEachIndexed { i, tab -> tab.setOnClickListener { showTab(i) } }
+
+        // Vegen naar links of rechts wisselt van tabblad
+        gestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
+                val start = e1 ?: return false
+                val dx = e2.x - start.x
+                val dy = e2.y - start.y
+                if (kotlin.math.abs(dx) < 120 || kotlin.math.abs(dx) < kotlin.math.abs(dy) * 1.5f) return false
+                if (dx < 0 && currentTab < pages.size - 1) showTab(currentTab + 1)
+                else if (dx > 0 && currentTab > 0) showTab(currentTab - 1)
+                return true
+            }
+        })
+        currentTab = prefs.getInt("tab", 0).coerceIn(0, pages.size - 1)
+        showTab(currentTab, animate = false)
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (::gestures.isInitialized) gestures.onTouchEvent(ev)
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun showTab(index: Int, animate: Boolean = true) {
+        val from = currentTab
+        currentTab = index
+        prefs.edit().putInt("tab", index).apply()
+        pages.forEachIndexed { i, page ->
+            if (i == index) {
+                page.visibility = View.VISIBLE
+                if (animate && i != from) {
+                    val dir = if (index > from) 1 else -1
+                    page.translationX = dir * page.width * 0.25f
+                    page.alpha = 0f
+                    page.animate().translationX(0f).alpha(1f).setDuration(180).start()
+                }
+            } else {
+                page.animate().cancel()
+                page.translationX = 0f
+                page.alpha = 1f
+                page.visibility = View.GONE
+            }
+        }
+        val active = getColor(R.color.amber)
+        val idle = getColor(R.color.muted)
+        val ids = listOf(
+            R.id.tabDriveIcon to R.id.tabDriveLabel,
+            R.id.tabMusicIcon to R.id.tabMusicLabel,
+            R.id.tabAppsIcon to R.id.tabAppsLabel,
+            R.id.tabPlacesIcon to R.id.tabPlacesLabel,
+        )
+        ids.forEachIndexed { i, (icon, label) ->
+            val c = if (i == index) active else idle
+            findViewById<ImageView>(icon).setColorFilter(c)
+            findViewById<TextView>(label).setTextColor(c)
+        }
+    }
+
+    /** Liggend: snelheid en muziek naast elkaar. Staand: onder elkaar. */
+    private fun arrangeDrivePage() {
+        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val page = findViewById<LinearLayout>(R.id.pageDrive)
+        page.orientation = if (landscape) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        val gap = (12 * resources.displayMetrics.density).toInt()
+        val speed = findViewById<View>(R.id.speedCard)
+        val mini = findViewById<View>(R.id.miniPlayer)
+        speed.layoutParams = if (landscape) LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            else LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.3f)
+        mini.layoutParams = (if (landscape) LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            else LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)).apply {
+            if (landscape) marginStart = gap else topMargin = gap
+        }
     }
 }
