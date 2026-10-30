@@ -85,7 +85,7 @@ class BubbleService : Service() {
         )
         val notification = Notification.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_car)
-            .setContentTitle("Autoscherm")
+            .setContentTitle("Golf")
             .setContentText("Tik om terug te gaan naar je autoscherm")
             .setContentIntent(open)
             .setOngoing(true)

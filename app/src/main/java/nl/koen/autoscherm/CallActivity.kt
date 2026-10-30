@@ -160,7 +160,7 @@ class CallActivity : Activity() {
     @SuppressLint("MissingPermission")
     private fun answer() {
         if (checkSelfPermission(Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Geef Autoscherm toestemming voor 'Telefoon' om op te nemen", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Geef Golf toestemming voor 'Telefoon' om op te nemen", Toast.LENGTH_LONG).show()
             return
         }
         getSystemService(TelecomManager::class.java).acceptRingingCall()

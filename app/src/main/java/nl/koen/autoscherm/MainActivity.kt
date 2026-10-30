@@ -322,7 +322,7 @@ class MainActivity : Activity() {
         if (!Settings.canDrawOverlays(this) && !prefs.getBoolean("askedOverlay", false)) {
             AlertDialog.Builder(this)
                 .setTitle("Terugknop aanzetten?")
-                .setMessage("Dan zie je in Maps, Flitsmeister en WhatsApp een rond knopje. Eén tik en je bent terug in je autoscherm.\n\nZet bij de volgende stap 'Autoscherm' aan en ga daarna terug.")
+                .setMessage("Dan zie je in Maps, Flitsmeister en WhatsApp een rond knopje. Eén tik en je bent terug in je autoscherm.\n\nZet bij de volgende stap 'Golf' aan en ga daarna terug.")
                 .setPositiveButton("Aanzetten") { _, _ ->
                     prefs.edit().putBoolean("askedOverlay", true).apply()
                     startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
@@ -495,7 +495,7 @@ class MainActivity : Activity() {
 
     private fun setupMediaButtons() {
         mediaHint.setOnClickListener {
-            Toast.makeText(this, "Zet 'Autoscherm' aan en ga terug", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Zet 'Golf' aan en ga terug", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
         findViewById<ImageButton>(R.id.btnPrev).setOnClickListener {
@@ -867,7 +867,7 @@ class MainActivity : Activity() {
         val fileName = "autoscherm-update.apk"
         File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName).delete()
         val request = DownloadManager.Request(Uri.parse(url))
-            .setTitle("Autoscherm update")
+            .setTitle("Golf update")
             .setMimeType("application/vnd.android.package-archive")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
             .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName)

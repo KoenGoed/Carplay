@@ -13,5 +13,5 @@ set -e
 cp app/build/outputs/apk/debug/app-debug.apk Autoscherm.apk
 NOTES="$(cat WIJZIGINGEN.txt 2>/dev/null || echo 'Nieuwe versie')"
 gh release create "v${GITHUB_RUN_NUMBER}" Autoscherm.apk \
-  --title "Autoscherm 1.${GITHUB_RUN_NUMBER}" \
+  --title "Golf 1.${GITHUB_RUN_NUMBER}" \
   --notes "$NOTES"
