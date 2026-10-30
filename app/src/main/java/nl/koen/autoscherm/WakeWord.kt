@@ -137,7 +137,9 @@ class WakeWord(
         }
     }
 
-    override fun onPartialResult(hypothesis: String?) = check(hypothesis, "partial")
+    // Niet op tussenresultaten reageren: wachten tot je klaar bent met "Hey Golf" zeggen,
+    // anders hoort de spraakopdracht nog het staartje "golf" en snapt hij je niet.
+    override fun onPartialResult(hypothesis: String?) = Unit
     override fun onResult(hypothesis: String?) = check(hypothesis, "text")
     override fun onFinalResult(hypothesis: String?) = Unit
     override fun onError(exception: Exception?) {

@@ -1,4 +1,4 @@
 Nieuw in deze versie:
-- Maximumsnelheid opgelost: de gratis kaartdienst was overbelast. De app gebruikt nu TomTom (betrouwbaar) en anders meerdere reserveservers. Lukt het even niet, dan zie je een "?" in het bord.
-- "Hey Golf": zeg het terwijl het autoscherm open is en de app gaat luisteren. Werkt zonder internet; de eerste keer wordt het Nederlandse spraakmodel (40 MB) gedownload.
-- Snelste route naar huis: zeg "snelste route naar huis" of tik op de knop bij Plekken. De app vergelijkt je twee vaste routes met de files van nu en zegt welke het snelst is. Is er onderweg iets gebeurd waardoor een andere weg veel sneller is, dan zet hij Maps aan.
+- "Hey Golf" verbeterd: de app wacht tot je klaar bent, zegt "Ja?" en luistert dan pas naar je opdracht. Eerst hoorde hij nog het woord "golf" en snapte hij je daarom niet.
+- Vangt hij na "Hey Golf" niets op, dan luistert hij nog één keer.
+- Zeg je in één adem "Hey Golf, bel mama", dan haalt hij "Hey Golf" er zelf af.

@@ -130,6 +130,7 @@ class MainActivity : Activity() {
 
     // "Hey Golf"
     private lateinit var wake: WakeWord
+    private var wakeRetries = 0
 
     // Nachtstand
     private var nightOn: Boolean? = null
@@ -530,7 +531,7 @@ class MainActivity : Activity() {
         findViewById<ImageButton>(R.id.btnMic).setOnClickListener { startListening() }
         wake = WakeWord(
             this,
-            onWake = { if (visible) startListening() },
+            onWake = { if (visible) answerWake() },
             onStatus = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() },
         )
     }
@@ -557,9 +558,16 @@ class MainActivity : Activity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_SPEECH && resultCode == RESULT_OK) {
-            val text = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-            if (!text.isNullOrBlank()) handleCommand(text)
+        if (requestCode == REQ_SPEECH) {
+            val text = if (resultCode == RESULT_OK)
+                data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() else null
+            if (!text.isNullOrBlank()) {
+                handleCommand(text)
+            } else if (wakeRetries > 0) {
+                // Na "Hey Golf" niets opgevangen: nog één keer luisteren
+                wakeRetries--
+                handler.postDelayed({ startListening() }, 300)
+            }
         }
     }
 
@@ -570,7 +578,17 @@ class MainActivity : Activity() {
 
     /** Vertaalt wat je zegt naar een actie. */
     private fun handleCommand(raw: String) {
+        // "Hey Golf" zelf hoort niet bij de opdracht
         val t = raw.lowercase(Locale("nl", "NL")).trim().trimEnd('.', '!', '?')
+            .replace(Regex("^((hey|hé|he|hee)[ ,]+)?golf[ ,!.]*"), "").trim()
+        if (t.isEmpty()) {
+            if (wakeRetries > 0) {
+                wakeRetries--
+                startListening()
+            }
+            return
+        }
+        wakeRetries = 0
 
         fun after(prefixes: List<String>): String? =
             prefixes.firstOrNull { t.startsWith(it) }?.let { t.removePrefix(it).trim() }
@@ -1306,5 +1324,35 @@ class MainActivity : Activity() {
         }
         val text = overview.replaceFirstChar { it.uppercase() } + ". " + advice + delayText(best.second.delaySeconds)
         say(text)
+    }
+
+    /** Na "Hey Golf": kort "Ja?" zeggen en pas daarna luisteren, zodat je weet wanneer je kunt praten. */
+    private fun answerWake() {
+        wakeRetries = 1
+        val engine = tts
+        var started = false
+        val go = Runnable {
+            if (!started && visible) {
+                started = true
+                startListening()
+            }
+        }
+        if (engine == null) {
+            handler.postDelayed(go, 400)
+            return
+        }
+        engine.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) = Unit
+            override fun onDone(utteranceId: String?) {
+                if (utteranceId == "wake") handler.post(go)
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                if (utteranceId == "wake") handler.post(go)
+            }
+        })
+        engine.speak("Ja?", TextToSpeech.QUEUE_FLUSH, null, "wake")
+        // Vangnet als de spraak niet afspeelt
+        handler.postDelayed(go, 1500)
     }
 }
