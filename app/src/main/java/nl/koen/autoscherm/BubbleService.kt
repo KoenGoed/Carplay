@@ -3,11 +3,7 @@ package nl.koen.autoscherm
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Notification
-import android.Manifest
-import android.annotation.SuppressLint
 import android.app.NotificationChannel
-import android.Manifest
-import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
