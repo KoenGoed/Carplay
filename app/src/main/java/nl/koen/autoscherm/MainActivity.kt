@@ -144,7 +144,7 @@ class MainActivity : Activity() {
         setupVoice()
         setupUpdates()
         handleListenExtra(intent)
-        versionLabel = try { "  ·  v" + packageManager.getPackageInfo(packageName, 0).versionName } catch (e: Exception) { "" }
+        versionLabel = try { "\nversie " + packageManager.getPackageInfo(packageName, 0).versionName } catch (e: Exception) { "" }
         askBluetoothPermission()
     }
 

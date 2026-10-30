@@ -1,4 +1,2 @@
 Nieuw in deze versie:
-- Autoscherm opent vanzelf zodra je telefoon met WEGMAN CARKIT verbindt.
-- Opgelost: na een spraakopdracht (bijv. "open Flitsmeister") verdween de terugknop. Die blijft nu staan.
-- Het versienummer staat nu naast de datum, zodat je ziet welke versie je hebt.
+- De microfoonknop valt niet meer half buiten beeld. Datum en versienummer staan nu klein op twee regels.
