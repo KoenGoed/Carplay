@@ -1,8 +1,11 @@
-name: Bouw Autoscherm APK
+name: Bouw Autoscherm
 
 on:
   push:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -10,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Zip uitpakken
-        run: unzip -o Autoscherm.zip
+        run: unzip -o Autoschermv1.2.zip
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -18,10 +21,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: APK bouwen
-        working-directory: Autoscherm
-        run: gradle assembleDebug
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Autoscherm-apk
-          path: Autoscherm/app/build/outputs/apk/debug/app-debug.apk
+      - name: Bouwen en als update publiceren
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: bash Autoscherm/ci/build.sh
