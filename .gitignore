@@ -3,3 +3,4 @@ app/build/
 .gradle/
 *.apk
 local.properties
+build.log
