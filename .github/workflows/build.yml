@@ -2,6 +2,7 @@ name: Bouw Autoscherm
 
 on:
   push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -12,8 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Zip uitpakken
-        run: unzip -o Autoschermv1.2.zip
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -25,4 +24,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        run: bash Autoscherm/ci/build.sh
+        run: bash ci/build.sh
