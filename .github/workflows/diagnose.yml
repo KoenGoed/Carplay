@@ -7,15 +7,16 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Maximumsnelheid-dienst testen
+      - name: Bronnen testen
         run: |
           set +e
-          Q='[out:json][timeout:8];way(around:60,52.5096,5.4874)[highway][~"^maxspeed"~"."];out tags geom;'
-          for ua in "Autoscherm/1.0 (persoonlijke auto-app)" "Dalvik/2.1.0 (Linux; U; Android 14)"; do
-            for ep in https://overpass-api.de/api/interpreter https://overpass.kumi.systems/api/interpreter https://overpass.private.coffee/api/interpreter https://maps.mail.ru/osm/tools/overpass/api/interpreter; do
-              code=$(curl -s -o out.json -w "%{http_code}" --max-time 20 -A "$ua" --data-urlencode "data=$Q" "$ep")
-              n=$(python3 -c "import json;print(len(json.load(open('out.json'))['elements']))" 2>/dev/null || echo "geen json: $(head -c 120 out.json | tr '\n' ' ')")
-              echo "::notice::$ep | UA=$ua | HTTP $code | wegen=$n"
-            done
+          for u in \
+            https://repo1.maven.org/maven2/com/alphacephei/vosk-android/0.3.47/vosk-android-0.3.47.aar \
+            https://repo1.maven.org/maven2/com/alphacephei/vosk-android/0.3.45/vosk-android-0.3.45.aar \
+            https://repo1.maven.org/maven2/net/java/dev/jna/jna/5.13.0/jna-5.13.0.aar \
+            https://alphacephei.com/vosk/models/vosk-model-small-nl-0.22.zip \
+            "https://api.tomtom.com/search/2/reverseGeocode/52.5,5.47.json?key=x"; do
+            code=$(curl -s -o /dev/null -L -I -w "%{http_code} %{size_download} %header{content-length}" --max-time 20 "$u")
+            echo "::notice::$u -> $code"
           done
-          python3 -c "import json;d=json.load(open('out.json'));print('::notice::voorbeeld', [ (e['tags'].get('name'), e['tags'].get('maxspeed')) for e in d['elements'][:5]])" || true
+          curl -s -L --max-time 20 https://alphacephei.com/vosk/models | grep -o 'vosk-model[a-z-]*nl[^"<]*zip' | sort -u | while read m; do echo "::notice::model $m"; done

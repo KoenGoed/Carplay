@@ -3,6 +3,12 @@ name: Bouw Autoscherm
 on:
   push:
     branches: [main]
+    paths:
+      - 'app/**'
+      - 'ci/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - 'WIJZIGINGEN.txt'
   workflow_dispatch:
 
 permissions:
