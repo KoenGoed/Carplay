@@ -129,9 +129,42 @@
         </LinearLayout>
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="›" android:textColor="@color/muted" android:textSize="30sp"/>
     </LinearLayout>
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="6dp" android:paddingTop="10dp" android:paddingBottom="8dp"
-        android:letterSpacing="0.1" android:text="INSTELLINGEN" android:textColor="@color/muted" android:textSize="12sp" android:textStyle="bold"/>
-    <LinearLayout android:id="@+id/routeSettings" android:layout_width="match_parent" android:layout_height="76dp" android:layout_marginBottom="10dp"
+    
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="6dp" android:paddingTop="4dp"
+                    android:text="Tik om te navigeren. Houd lang ingedrukt om de naam of het adres te wijzigen."
+                    android:textColor="@color/muted" android:textSize="13sp"/>
+            </LinearLayout>
+        </ScrollView>
+        <!-- Tab 5: Instellen -->
+        <ScrollView android:id="@+id/pageSettings" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <LinearLayout android:id="@+id/carBtSettings" android:layout_width="match_parent" android:layout_height="76dp" android:layout_marginBottom="10dp"
+        android:background="@drawable/bg_tile" android:clickable="true" android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground" android:gravity="center_vertical" android:orientation="horizontal"
+        android:paddingStart="20dp" android:paddingEnd="20dp">
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Bluetooth van je auto"
+                android:textColor="@color/fg" android:textSize="19sp" android:textStyle="bold"/>
+            <TextView android:id="@+id/carBtInfo" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:ellipsize="end" android:maxLines="1" android:text="WEGMAN CARKIT" android:textColor="@color/muted" android:textSize="14sp"/>
+        </LinearLayout>
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="›" android:textColor="@color/muted" android:textSize="30sp"/>
+    </LinearLayout>
+    
+                <LinearLayout android:id="@+id/startAppsSettings" android:layout_width="match_parent" android:layout_height="76dp" android:layout_marginBottom="10dp"
+        android:background="@drawable/bg_tile" android:clickable="true" android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground" android:gravity="center_vertical" android:orientation="horizontal"
+        android:paddingStart="20dp" android:paddingEnd="20dp">
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Bij instappen"
+                android:textColor="@color/fg" android:textSize="19sp" android:textStyle="bold"/>
+            <TextView android:id="@+id/startAppsInfo" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:ellipsize="end" android:maxLines="1" android:text="Flitsmeister en muziek" android:textColor="@color/muted" android:textSize="14sp"/>
+        </LinearLayout>
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="›" android:textColor="@color/muted" android:textSize="30sp"/>
+    </LinearLayout>
+    
+                <LinearLayout android:id="@+id/routeSettings" android:layout_width="match_parent" android:layout_height="76dp" android:layout_marginBottom="10dp"
         android:background="@drawable/bg_tile" android:clickable="true" android:focusable="true"
         android:foreground="?android:attr/selectableItemBackground" android:gravity="center_vertical" android:orientation="horizontal"
         android:paddingStart="20dp" android:paddingEnd="20dp">
@@ -155,9 +188,6 @@
         </LinearLayout>
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="›" android:textColor="@color/muted" android:textSize="30sp"/>
     </LinearLayout>
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="6dp" android:paddingTop="4dp"
-                    android:text="Tik om te navigeren. Houd lang ingedrukt om de naam of het adres te wijzigen."
-                    android:textColor="@color/muted" android:textSize="13sp"/>
             </LinearLayout>
         </ScrollView>
     </FrameLayout>
@@ -191,6 +221,13 @@
         <ImageView android:id="@+id/tabPlacesIcon" android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_place" android:importantForAccessibility="no"/>
         <TextView android:id="@+id/tabPlacesLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
             android:text="Plekken" android:textColor="@color/muted" android:textSize="12sp" android:textStyle="bold"/>
+    </LinearLayout>
+    <LinearLayout android:id="@+id/tabSettings" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+        android:gravity="center" android:orientation="vertical" android:clickable="true" android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground" android:contentDescription="Instellen">
+        <ImageView android:id="@+id/tabSettingsIcon" android:layout_width="26dp" android:layout_height="26dp" android:src="@drawable/ic_settings" android:importantForAccessibility="no"/>
+        <TextView android:id="@+id/tabSettingsLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+            android:text="Instellen" android:textColor="@color/muted" android:textSize="12sp" android:textStyle="bold"/>
     </LinearLayout>
     </LinearLayout>
 </LinearLayout>

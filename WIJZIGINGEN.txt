@@ -1,3 +1,6 @@
 Nieuw in deze versie:
-- De app heet nu Golf en heeft een eigen logo: een amberkleurig silhouet van een hatchback.
-- Ook het zwevende terugknopje heeft het nieuwe autootje.
+- Spraak blijft niet meer hangen: geen Google-venster meer, maar een balk onderin. Verstaat hij je niet, dan zegt hij dat kort en speelt de muziek gewoon verder.
+- Tijdens het luisteren pauzeert de muziek, zodat "Ja?" en je opdracht goed te horen zijn. Daarna speelt de muziek vanzelf verder.
+- Nieuwe opdrachten: "stop de muziek", "pauze", "navigatie uit", "stop de route", "harder" en "zachter".
+- Bellen herkent namen beter, ook als de spraakherkenning ze net anders verstaat (zoals Goedegebuure).
+- Nieuw tabblad Instellen: kies zelf je Bluetooth-apparaat en wat er gebeurt bij instappen (Flitsmeister, muziek, WhatsApp, Maps).

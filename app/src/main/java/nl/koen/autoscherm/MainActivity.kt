@@ -15,6 +15,9 @@ import android.os.Environment
 import android.provider.ContactsContract
 import android.provider.MediaStore
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.view.Gravity
+import android.widget.FrameLayout
 import android.speech.tts.TextToSpeech
 import android.content.res.Configuration
 import android.location.Location
@@ -30,6 +33,8 @@ import java.net.URL
 import android.content.ComponentName
 import android.content.Intent
 import android.content.SharedPreferences
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
@@ -248,6 +253,7 @@ class MainActivity : Activity() {
         visible = false
         stopLocation()
         wake.stop()
+        cancelListening()
     }
 
     override fun onDestroy() {
@@ -255,6 +261,8 @@ class MainActivity : Activity() {
         if (listenerAdded) sessionManager.removeOnActiveSessionsChangedListener(sessionsChanged)
         controller?.unregisterCallback(mediaCallback)
         tts?.shutdown()
+        recognizer?.destroy()
+        releaseFocus()
         try { unregisterReceiver(downloadDone) } catch (ignored: Exception) { }
     }
 
@@ -524,32 +532,216 @@ class MainActivity : Activity() {
 
     // ---------- Spraakbesturing ----------
 
+    private val speechAttrs: AudioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
+
     private fun setupVoice() {
         tts = TextToSpeech(this) { status ->
-            if (status == TextToSpeech.SUCCESS) tts?.language = Locale("nl", "NL")
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale("nl", "NL")
+                tts?.setAudioAttributes(speechAttrs)
+            }
         }
-        findViewById<ImageButton>(R.id.btnMic).setOnClickListener { startListening() }
+        tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) = Unit
+            override fun onDone(utteranceId: String?) { handler.post { spoken(utteranceId) } }
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) { handler.post { spoken(utteranceId) } }
+        })
+        findViewById<ImageButton>(R.id.btnMic).setOnClickListener { if (listening) cancelListening() else startListening() }
         wake = WakeWord(
             this,
             onWake = { if (visible) answerWake() },
             onStatus = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() },
         )
+        setupVoicePanel()
+        loadContactNames()
+    }
+
+    // --- Muziek even stil tijdens spraak ---
+
+    private var focusRequest: AudioFocusRequest? = null
+
+    /** pauseMusic = true: muziek pauzeert (tijdens luisteren). false: muziek wordt alleen zachter. */
+    private fun holdFocus(pauseMusic: Boolean) {
+        if (focusRequest != null) return
+        val req = AudioFocusRequest.Builder(
+            if (pauseMusic) AudioManager.AUDIOFOCUS_GAIN_TRANSIENT else AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+        ).setAudioAttributes(speechAttrs).setOnAudioFocusChangeListener { }.build()
+        getSystemService(AudioManager::class.java).requestAudioFocus(req)
+        focusRequest = req
+    }
+
+    /** Geeft het geluid terug, dan speelt Spotify vanzelf verder. */
+    private fun releaseFocus() {
+        focusRequest?.let { getSystemService(AudioManager::class.java).abandonAudioFocusRequest(it) }
+        focusRequest = null
+    }
+
+    private fun spoken(id: String?) {
+        when (id) {
+            "wake" -> if (pendingWakeListen) {
+                pendingWakeListen = false
+                startListening()
+            }
+            "say" -> if (!listening && tts?.isSpeaking != true) releaseFocus()
+        }
+    }
+
+    private fun speak(text: String, id: String) {
+        val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1f) }
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, id)
+    }
+
+    private fun say(text: String) {
+        Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+        holdFocus(pauseMusic = false)
+        speak(text, "say")
+    }
+
+    /** Muziekopdrachten pas uitvoeren nadat het geluid is teruggegeven. */
+    private fun music(action: () -> Unit) {
+        releaseFocus()
+        handler.postDelayed({ action() }, 450)
+    }
+
+    // --- Luisteren in de app zelf, zonder het Google-venster dat kon blijven hangen ---
+
+    private var recognizer: SpeechRecognizer? = null
+    private var listening = false
+    private var pendingWakeListen = false
+    private var contactNames: List<String> = emptyList()
+    private lateinit var voicePanel: TextView
+
+    private val listenTimeout = Runnable {
+        if (listening) {
+            recognizer?.cancel()
+            endListening()
+            say("Sorry, dat verstond ik niet")
+        }
+    }
+
+    private fun setupVoicePanel() {
+        val d = resources.displayMetrics.density
+        voicePanel = TextView(this).apply {
+            setBackgroundResource(R.drawable.bg_card)
+            setTextColor(getColor(R.color.amber))
+            textSize = 22f
+            gravity = Gravity.CENTER
+            setPadding((24 * d).toInt(), (18 * d).toInt(), (24 * d).toInt(), (18 * d).toInt())
+            elevation = 20 * d
+            visibility = View.GONE
+            setOnClickListener { cancelListening() }
+        }
+        val lp = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM).apply {
+            setMargins((20 * d).toInt(), 0, (20 * d).toInt(), (92 * d).toInt())
+        }
+        findViewById<FrameLayout>(android.R.id.content).addView(voicePanel, lp)
+    }
+
+    private fun showVoice(text: String) {
+        voicePanel.text = text
+        voicePanel.visibility = View.VISIBLE
     }
 
     private fun handleListenExtra(intent: Intent?) {
         if (intent?.getBooleanExtra(EXTRA_LISTEN, false) == true) {
-            intent?.removeExtra(EXTRA_LISTEN)
+            intent.removeExtra(EXTRA_LISTEN)
             handler.postDelayed({ startListening() }, 400)
         }
     }
 
     private fun startListening() {
+        if (listening) return
+        if (!hasPerm(Manifest.permission.RECORD_AUDIO)) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_PERMS)
+            return
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            legacyListen()
+            return
+        }
+        tts?.stop()
+        wake.stop()
+        holdFocus(pauseMusic = true)
+        listening = true
+        showVoice("Luisteren…")
+        handler.removeCallbacks(listenTimeout)
+        handler.postDelayed(listenTimeout, 12_000)
+        // Even wachten tot "Hey Golf" de microfoon heeft losgelaten
+        handler.postDelayed({ if (listening) beginRecognizer() }, 350)
+    }
+
+    private fun beginRecognizer() {
+        val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(this).also { recognizer = it }
+        r.setRecognitionListener(object : android.speech.RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) { showVoice("Zeg het maar…") }
+            override fun onBeginningOfSpeech() = Unit
+            override fun onRmsChanged(rmsdB: Float) = Unit
+            override fun onBufferReceived(buffer: ByteArray?) = Unit
+            override fun onEndOfSpeech() { showVoice("Even denken…") }
+            override fun onEvent(eventType: Int, params: Bundle?) = Unit
+            override fun onPartialResults(partial: Bundle?) {
+                partial?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                    ?.takeIf { it.isNotBlank() }?.let { showVoice(it) }
+            }
+            override fun onResults(results: Bundle?) {
+                if (!listening) return
+                val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty().filter { it.isNotBlank() }
+                endListening()
+                if (list.isEmpty()) say("Sorry, dat verstond ik niet") else handleCommand(list.first(), list)
+            }
+            override fun onError(error: Int) {
+                if (!listening) return
+                endListening()
+                if (error == SpeechRecognizer.ERROR_CLIENT) releaseFocus()
+                else say("Sorry, dat verstond ik niet")
+            }
+        })
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "nl-NL")
+            .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+            .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+        // Android 13+: namen uit je contacten krijgen voorrang (helpt bij bijv. Goedegebuure)
+        if (Build.VERSION.SDK_INT >= 33 && contactNames.isNotEmpty()) {
+            val hints = ArrayList(contactNames.take(300) + apps.map { it.label })
+            intent.putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS, hints)
+        }
+        try {
+            r.startListening(intent)
+        } catch (e: Exception) {
+            endListening()
+            say("Spraakherkenning lukte niet")
+        }
+    }
+
+    private fun endListening() {
+        listening = false
+        handler.removeCallbacks(listenTimeout)
+        voicePanel.visibility = View.GONE
+        if (visible) handler.postDelayed({ if (visible && !listening) wake.start() }, 1500)
+    }
+
+    private fun cancelListening() {
+        pendingWakeListen = false
+        if (!listening) return
+        try { recognizer?.cancel() } catch (ignored: Exception) { }
+        endListening()
+        releaseFocus()
+    }
+
+    /** Reserve als de telefoon geen losse spraakherkenning heeft: het Google-venster. */
+    private fun legacyListen() {
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "nl-NL")
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Bijv. bel mama, open Flitsmeister, rij naar huis")
-            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
         try {
+            holdFocus(pauseMusic = true)
             startActivityForResult(i, REQ_SPEECH)
         } catch (e: ActivityNotFoundException) {
             say("Spraakherkenning is niet beschikbaar. Installeer of update de Google-app.")
@@ -559,39 +751,63 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_SPEECH) {
-            val text = if (resultCode == RESULT_OK)
-                data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() else null
-            if (!text.isNullOrBlank()) {
-                handleCommand(text)
-            } else if (wakeRetries > 0) {
-                // Na "Hey Golf" niets opgevangen: nog één keer luisteren
-                wakeRetries--
-                handler.postDelayed({ startListening() }, 300)
-            }
+            val list = if (resultCode == RESULT_OK)
+                data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS).orEmpty().filter { it.isNotBlank() } else emptyList()
+            if (list.isNotEmpty()) handleCommand(list.first(), list) else releaseFocus()
         }
     }
 
-    private fun say(text: String) {
-        Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "autoscherm")
+    /** Na "Hey Golf": muziek even stil, duidelijk "Ja?" zeggen en dan luisteren. */
+    private fun answerWake() {
+        wakeRetries = 0
+        holdFocus(pauseMusic = true)
+        pendingWakeListen = true
+        handler.postDelayed({ speak("Ja?", "wake") }, 250)
+        // Vangnet als de spraak niet afspeelt
+        handler.postDelayed({ spoken("wake") }, 2200)
     }
+
+    private fun cleanCommand(raw: String) = raw.lowercase(Locale("nl", "NL")).trim().trimEnd('.', '!', '?')
+        .replace(Regex("^((hey|hé|he|hee)[ ,]+)?golf[ ,!.]*"), "").trim()
 
     /** Vertaalt wat je zegt naar een actie. */
-    private fun handleCommand(raw: String) {
+    private fun handleCommand(raw: String, alternatives: List<String> = listOf(raw)) {
         // "Hey Golf" zelf hoort niet bij de opdracht
-        val t = raw.lowercase(Locale("nl", "NL")).trim().trimEnd('.', '!', '?')
-            .replace(Regex("^((hey|hé|he|hee)[ ,]+)?golf[ ,!.]*"), "").trim()
+        val t = cleanCommand(raw)
         if (t.isEmpty()) {
-            if (wakeRetries > 0) {
-                wakeRetries--
-                startListening()
-            }
+            say("Sorry, dat verstond ik niet")
             return
         }
-        wakeRetries = 0
 
         fun after(prefixes: List<String>): String? =
             prefixes.firstOrNull { t.startsWith(it) }?.let { t.removePrefix(it).trim() }
+
+        // Navigatie stoppen
+        val stopWord = Regex("\\b(stop|stoppen|uit|beëindig|beeindig|afsluiten|sluit|annuleer|annuleren)\\b")
+        if (stopWord.containsMatchIn(t) && !t.contains(" naar ") &&
+            (t.contains("navigatie") || t.contains("navigeren") || t.contains("route") || t.contains("maps"))
+        ) {
+            stopNavigation(); return
+        }
+
+        // Muziek stoppen of pauzeren
+        val musicWord = t.contains("muziek") || t.contains("spotify") || t.contains("liedje") || t.contains("nummer")
+        if (Regex("\\b(pauze|pauzeer|pauzeren)\\b").containsMatchIn(t) || t == "stop" || t == "stoppen" ||
+            (musicWord && stopWord.containsMatchIn(t))
+        ) {
+            music { controller?.transportControls?.pause() ?: sendMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE) }
+            return
+        }
+
+        // Volume
+        if (t.contains("harder") || t.contains("volume omhoog") || t.contains("luider")) {
+            music { repeat(3) { getSystemService(AudioManager::class.java).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI) } }
+            return
+        }
+        if (t.contains("zachter") || t.contains("volume omlaag") || t.contains("stiller")) {
+            music { repeat(3) { getSystemService(AudioManager::class.java).adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI) } }
+            return
+        }
 
         // Parkeerplek
         if (t.contains("mijn auto") || t.contains("geparkeerd") || t.contains("parkeerplek")) {
@@ -612,9 +828,14 @@ class MainActivity : Activity() {
             return
         }
 
-        // Bellen
-        after(listOf("bel naar ", "bellen naar ", "bel ", "telefoneer "))?.let { name ->
-            callContact(name.removeSuffix(" op").trim()); return
+        // Bellen: alle varianten die de spraakherkenning hoorde, worden vergeleken met je contacten
+        val callPrefixes = listOf("bel naar ", "bellen naar ", "bel ", "telefoneer ")
+        after(callPrefixes)?.let { name ->
+            val others = alternatives.mapNotNull { alt ->
+                val a = cleanCommand(alt)
+                callPrefixes.firstOrNull { a.startsWith(it) }?.let { a.removePrefix(it).removeSuffix(" op").trim() }
+            }
+            callContact(name.removeSuffix(" op").trim(), others); return
         }
 
         // Snelste route naar huis (vaste routes vergelijken met de files van nu)
@@ -638,17 +859,14 @@ class MainActivity : Activity() {
 
         // Muziek bedienen
         when (t) {
-            "pauze", "pauzeer", "stop", "stop muziek", "stop de muziek", "muziek uit", "zet muziek uit", "zet de muziek uit" -> {
-                controller?.transportControls?.pause() ?: sendMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE); return
-            }
             "volgende", "volgend nummer", "volgende nummer", "skip", "volgend liedje", "volgende liedje" -> {
-                controller?.transportControls?.skipToNext() ?: sendMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT); return
+                music { controller?.transportControls?.skipToNext() ?: sendMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT) }; return
             }
             "vorige", "vorig nummer", "vorige nummer", "terug", "vorig liedje" -> {
-                controller?.transportControls?.skipToPrevious() ?: sendMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS); return
+                music { controller?.transportControls?.skipToPrevious() ?: sendMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS) }; return
             }
             "speel", "speel af", "afspelen", "play", "muziek aan", "zet muziek aan", "zet de muziek aan", "speel muziek", "verder", "ga verder" -> {
-                controller?.transportControls?.play() ?: sendMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY); return
+                music { controller?.transportControls?.play() ?: sendMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY) }; return
             }
         }
         after(listOf("speel ", "zet ", "draai "))?.let { rest ->
@@ -668,6 +886,15 @@ class MainActivity : Activity() {
         say("Dat snapte ik niet: $raw")
     }
 
+    private fun stopNavigation() {
+        if (MediaListener.stopNavigation()) {
+            say("Navigatie gestopt")
+        } else {
+            say("Ik kon de navigatie niet zelf stoppen. Ik open Maps, tik daar op het kruisje.")
+            apps.firstOrNull { it.label == "Maps" }?.let { app -> handler.postDelayed({ openApp(app) }, 2500) }
+        }
+    }
+
     private fun navigateSaved(key: String, name: String) {
         val addr = prefs.getString(key, null)
         if (addr.isNullOrBlank()) {
@@ -679,7 +906,6 @@ class MainActivity : Activity() {
     }
 
     private fun playSearch(query: String) {
-        say("Ik zet $query op")
         val i = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH)
             .setPackage(SPOTIFY)
             .putExtra(SearchManager.QUERY, query)
@@ -688,25 +914,22 @@ class MainActivity : Activity() {
             say("Spotify is niet geïnstalleerd")
             return
         }
-        startOther(i)
-        // Spotify springt naar voren; na een paar seconden terug naar het autoscherm
-        handler.postDelayed({
-            try {
-                startActivity(Intent(this, MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-            } catch (ignored: Exception) { }
-        }, 3500)
+        music {
+            startOther(i)
+            // Spotify springt naar voren; na een paar seconden terug naar het autoscherm
+            handler.postDelayed({ bringToFront() }, 3500)
+        }
     }
 
     private fun hasPerm(p: String) = checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
 
-    private fun callContact(spokenName: String) {
+    private fun callContact(spokenName: String, alternatives: List<String> = emptyList()) {
         if (!hasPerm(Manifest.permission.READ_CONTACTS)) {
             pendingCall = spokenName
             requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE), REQ_CONTACTS)
             return
         }
-        val match = findContact(spokenName)
+        val match = findContact((listOf(spokenName) + alternatives).distinct())
         if (match == null) {
             say("Ik kan $spokenName niet vinden in je contacten")
             return
@@ -716,13 +939,14 @@ class MainActivity : Activity() {
         say("Ik bel $name")
         val uri = Uri.parse("tel:" + Uri.encode(number))
         val call = if (hasPerm(Manifest.permission.CALL_PHONE)) Intent(Intent.ACTION_CALL, uri) else Intent(Intent.ACTION_DIAL, uri)
-        handler.postDelayed({ startOther(call) }, 600)
+        handler.postDelayed({ startOther(call) }, 1200)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_PERMS) {
             startLocation()
+            loadContactNames()
             if (visible) wake.start()
             return
         }
@@ -733,9 +957,68 @@ class MainActivity : Activity() {
         else say("Zonder toegang tot je contacten kan ik niet bellen")
     }
 
+    /** Namen uit je contacten, zodat de spraakherkenning ze beter herkent. */
+    private fun loadContactNames() {
+        if (!hasPerm(Manifest.permission.READ_CONTACTS)) return
+        Thread {
+            val names = mutableSetOf<String>()
+            try {
+                contentResolver.query(
+                    ContactsContract.Contacts.CONTENT_URI,
+                    arrayOf(ContactsContract.Contacts.DISPLAY_NAME),
+                    "${ContactsContract.Contacts.HAS_PHONE_NUMBER} = 1", null, null
+                )?.use { c -> while (c.moveToNext()) c.getString(0)?.takeIf { it.isNotBlank() }?.let { names += it } }
+            } catch (ignored: Exception) { }
+            runOnUiThread { contactNames = names.toList() }
+        }.start()
+    }
+
+    // --- Namen vergelijken, ook als de spraakherkenning ze net iets anders verstaat ---
+
+    private fun plain(s: String) = java.text.Normalizer.normalize(s.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "")
+        .replace(Regex("[^a-z0-9 ]"), " ")
+        .replace(Regex("\\s+"), " ").trim()
+
+    /** Hoe het klinkt: Nederlandse klanken gelijkgetrokken en zonder spaties. */
+    private fun sound(s: String): String {
+        var x = plain(s).replace(" ", "")
+        listOf("sch" to "s", "ch" to "g", "ij" to "ei", "y" to "ei", "uu" to "u", "ee" to "e", "oo" to "o",
+            "aa" to "a", "dt" to "t", "ph" to "f", "c" to "k", "z" to "s", "v" to "f", "ou" to "au", "th" to "t")
+            .forEach { (a, b) -> x = x.replace(a, b) }
+        return x.replace(Regex("(.)\\1+"), "$1")
+    }
+
+    private fun similarity(a: String, b: String): Double {
+        if (a.isEmpty() || b.isEmpty()) return 0.0
+        var prev = IntArray(b.length + 1) { it }
+        for (i in 1..a.length) {
+            val cur = IntArray(b.length + 1)
+            cur[0] = i
+            for (j in 1..b.length) {
+                cur[j] = minOf(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + if (a[i - 1] == b[j - 1]) 0 else 1)
+            }
+            prev = cur
+        }
+        return 1.0 - prev[b.length].toDouble() / maxOf(a.length, b.length)
+    }
+
+    private fun nameScore(contact: String, spoken: String): Double {
+        val c = plain(contact)
+        val s = plain(spoken)
+        if (c.isEmpty() || s.isEmpty()) return 0.0
+        if (c == s) return 1.0
+        val cWords = c.split(" ")
+        val sWords = s.split(" ")
+        if (cWords.first() == s) return 0.97            // alleen voornaam gezegd
+        val whole = similarity(sound(c), sound(s))
+        val perWord = sWords.map { w -> cWords.maxOf { similarity(sound(it), sound(w)) } }.average()
+        val prefix = if (s.length >= 3 && sound(c).startsWith(sound(s))) 0.9 else 0.0
+        return maxOf(whole, perWord * 0.97, prefix)
+    }
+
     /** Zoekt het contact dat het best past bij wat je zei. Kent ook mama/papa-varianten. */
-    private fun findContact(spoken: String): Pair<String, String>? {
-        val q = spoken.lowercase(Locale("nl", "NL")).trim()
+    private fun findContact(spokenNames: List<String>): Pair<String, String>? {
         val aliases = mapOf(
             "mama" to listOf("mama", "mam", "moeder", "mams", "ma"),
             "mam" to listOf("mam", "mama", "moeder", "mams", "ma"),
@@ -744,10 +1027,11 @@ class MainActivity : Activity() {
             "pap" to listOf("pap", "papa", "vader", "paps", "pa"),
             "vader" to listOf("vader", "papa", "pap"),
         )
-        val wanted = aliases[q] ?: listOf(q)
+        val wanted = spokenNames.flatMap { n -> aliases[plain(n)] ?: listOf(n) }.filter { it.isNotBlank() }.distinct()
+        if (wanted.isEmpty()) return null
 
         var best: Pair<String, String>? = null
-        var bestScore = 0
+        var bestScore = 0.0
         val cursor = contentResolver.query(
             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
             arrayOf(
@@ -761,21 +1045,8 @@ class MainActivity : Activity() {
                 val display: String = cursor.getString(0) ?: ""
                 val number: String = cursor.getString(1) ?: ""
                 if (display.isBlank() || number.isBlank()) continue
-                val name = display.lowercase(Locale("nl", "NL"))
-                val words = name.split(' ', '-', '(', ')').filter { it.isNotBlank() }
-                var score = 0
-                wanted.forEachIndexed { idx, w ->
-                    val bonus = if (idx == 0) 5 else 0
-                    val s = when {
-                        name == w -> 100
-                        words.firstOrNull() == w -> 85
-                        words.contains(w) -> 75
-                        name.startsWith(w) -> 60
-                        w.length >= 3 && name.contains(w) -> 40
-                        else -> 0
-                    }
-                    if (s > 0) score = maxOf(score, s + bonus)
-                }
+                // Wat je eerst zei telt iets zwaarder dan de andere varianten
+                val score = wanted.mapIndexed { i, w -> nameScore(display, w) - i * 0.01 }.max()
                 if (score > bestScore) {
                     bestScore = score
                     best = display to number
@@ -784,7 +1055,7 @@ class MainActivity : Activity() {
         } finally {
             cursor.close()
         }
-        return best
+        return if (bestScore >= 0.62) best else null
     }
 
     // ---------- Updates ----------
@@ -1043,12 +1314,14 @@ class MainActivity : Activity() {
             findViewById(R.id.mediaCard),
             findViewById(R.id.pageApps),
             findViewById(R.id.pagePlaces),
+            findViewById(R.id.pageSettings),
         )
         tabs = listOf(
             findViewById(R.id.tabDrive),
             findViewById(R.id.tabMusic),
             findViewById(R.id.tabApps),
             findViewById(R.id.tabPlaces),
+            findViewById(R.id.tabSettings),
         )
         tabs.forEachIndexed { i, tab -> tab.setOnClickListener { showTab(i) } }
 
@@ -1100,6 +1373,7 @@ class MainActivity : Activity() {
             R.id.tabMusicIcon to R.id.tabMusicLabel,
             R.id.tabAppsIcon to R.id.tabAppsLabel,
             R.id.tabPlacesIcon to R.id.tabPlacesLabel,
+            R.id.tabSettingsIcon to R.id.tabSettingsLabel,
         )
         ids.forEachIndexed { i, (icon, label) ->
             val c = if (i == index) active else idle
@@ -1126,20 +1400,89 @@ class MainActivity : Activity() {
 
     // ---------- Instappen: Flitsmeister op de achtergrond en muziek aan ----------
 
+    /** Keuzes bij instappen: sleutel, tekst in de lijst, korte naam. */
+    private val START_OPTIONS = listOf(
+        Triple("flits", "Flitsmeister op de achtergrond", "Flitsmeister"),
+        Triple("music", "Muziek afspelen (Spotify)", "muziek"),
+        Triple("whatsapp", "WhatsApp op de achtergrond", "WhatsApp"),
+        Triple("maps", "Google Maps openen", "Maps"),
+    )
+
+    private fun startApps(): Set<String> = prefs.getStringSet("start_apps", null) ?: setOf("flits", "music")
+
+    private fun chooseStartApps() {
+        val chosen = startApps().toMutableSet()
+        val checked = START_OPTIONS.map { it.first in chosen }.toBooleanArray()
+        AlertDialog.Builder(this)
+            .setTitle("Wat moet er gebeuren bij instappen?")
+            .setMultiChoiceItems(START_OPTIONS.map { it.second }.toTypedArray(), checked) { _, which, isChecked ->
+                if (isChecked) chosen += START_OPTIONS[which].first else chosen -= START_OPTIONS[which].first
+            }
+            .setPositiveButton("Opslaan") { _, _ ->
+                prefs.edit().putStringSet("start_apps", chosen.toSet()).apply()
+                refreshSettingsInfo()
+            }
+            .setNegativeButton("Annuleren", null)
+            .show()
+    }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun chooseCarBluetooth() {
+        if (Build.VERSION.SDK_INT >= 31 && !hasPerm(Manifest.permission.BLUETOOTH_CONNECT)) {
+            Toast.makeText(this, "Sta 'Apparaten in de buurt' toe en tik nog een keer", Toast.LENGTH_LONG).show()
+            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQ_PERMS)
+            return
+        }
+        val adapter = getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter
+        val devices = try { adapter?.bondedDevices?.toList() } catch (e: SecurityException) { null }.orEmpty()
+            .sortedBy { (it.name ?: it.address).lowercase() }
+        if (devices.isEmpty()) {
+            Toast.makeText(this, "Geen gekoppelde Bluetooth-apparaten. Koppel je carkit eerst in de Bluetooth-instellingen.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val names = devices.map { it.name ?: it.address }
+        val current = prefs.getString("car_bt_address", null)
+        val currentName = prefs.getString("car_bt_name", CarConnectReceiver.DEFAULT_CAR_NAME)
+        val checked = devices.indexOfFirst { d -> if (current != null) d.address == current else d.name.equals(currentName, true) }
+        AlertDialog.Builder(this)
+            .setTitle("Bluetooth van je auto")
+            .setSingleChoiceItems(names.toTypedArray(), checked) { dialog, which ->
+                val d = devices[which]
+                prefs.edit().putString("car_bt_address", d.address).putString("car_bt_name", d.name ?: d.address).apply()
+                refreshSettingsInfo()
+                Toast.makeText(this, "Golf start voortaan bij ${d.name ?: d.address}", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Annuleren", null)
+            .show()
+    }
+
     private fun handleCarStart(intent: Intent?) {
         if (intent?.getBooleanExtra(EXTRA_CAR_START, false) != true) return
         intent.removeExtra(EXTRA_CAR_START)
+        val chosen = startApps()
+        var at = 0L
 
-        val flits = apps.firstOrNull { it.label == "Flitsmeister" }?.let { launchIntentFor(it) }
-        if (flits != null) {
-            try {
-                startActivity(flits.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            } catch (ignored: Exception) { }
-            // Flitsmeister blijft op de achtergrond draaien; het autoscherm komt weer naar voren
-            handler.postDelayed({ bringToFront() }, 2500)
+        // Apps die op de achtergrond moeten draaien: openen en het autoscherm weer naar voren
+        for ((key, label) in listOf("flits" to "Flitsmeister", "whatsapp" to "WhatsApp")) {
+            if (key !in chosen) continue
+            val launch = apps.firstOrNull { it.label == label }?.let { launchIntentFor(it) } ?: continue
+            handler.postDelayed({
+                try { startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (ignored: Exception) { }
+            }, at)
+            handler.postDelayed({ bringToFront() }, at + 2500)
+            at += 3000
         }
-        // Even wachten tot het geluid via de carkit loopt
-        handler.postDelayed({ startMusic() }, if (flits != null) 4500L else 3000L)
+        // Muziek: even wachten tot het geluid via de carkit loopt
+        if ("music" in chosen) {
+            at = maxOf(at + 1500, 3000)
+            handler.postDelayed({ startMusic() }, at)
+            at += 5500
+        }
+        // Maps als laatste, en die blijft in beeld
+        if ("maps" in chosen) {
+            apps.firstOrNull { it.label == "Maps" }?.let { app -> handler.postDelayed({ openApp(app) }, at + 500) }
+        }
     }
 
     private fun bringToFront() {
@@ -1185,6 +1528,8 @@ class MainActivity : Activity() {
         findViewById<View>(R.id.routeHome).setOnClickListener { fastestHome() }
         findViewById<View>(R.id.routeSettings).setOnClickListener { editRoutes() }
         findViewById<View>(R.id.tomtomSettings).setOnClickListener { editTomTomKey() }
+        findViewById<View>(R.id.carBtSettings).setOnClickListener { chooseCarBluetooth() }
+        findViewById<View>(R.id.startAppsSettings).setOnClickListener { chooseStartApps() }
         refreshSettingsInfo()
     }
 
@@ -1192,6 +1537,11 @@ class MainActivity : Activity() {
         val names = listOf("a", "b").filter { routeVia(it).isNotEmpty() }.map { routeName(it) }
         findViewById<TextView>(R.id.routeSettingsInfo).text =
             if (names.isEmpty()) "Nog niet ingesteld" else names.joinToString("  •  ")
+        findViewById<TextView>(R.id.carBtInfo).text =
+            prefs.getString("car_bt_name", null) ?: CarConnectReceiver.DEFAULT_CAR_NAME
+        val chosen = startApps()
+        findViewById<TextView>(R.id.startAppsInfo).text =
+            START_OPTIONS.filter { it.first in chosen }.joinToString(", ") { it.third }.ifEmpty { "Niets, alleen dit scherm" }
         findViewById<TextView>(R.id.tomtomInfo).text =
             if (TomTom.key(this) == null) "Nog niet ingesteld — nodig voor files en maximumsnelheid" else "Ingesteld"
     }
@@ -1326,33 +1676,4 @@ class MainActivity : Activity() {
         say(text)
     }
 
-    /** Na "Hey Golf": kort "Ja?" zeggen en pas daarna luisteren, zodat je weet wanneer je kunt praten. */
-    private fun answerWake() {
-        wakeRetries = 1
-        val engine = tts
-        var started = false
-        val go = Runnable {
-            if (!started && visible) {
-                started = true
-                startListening()
-            }
-        }
-        if (engine == null) {
-            handler.postDelayed(go, 400)
-            return
-        }
-        engine.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = Unit
-            override fun onDone(utteranceId: String?) {
-                if (utteranceId == "wake") handler.post(go)
-            }
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                if (utteranceId == "wake") handler.post(go)
-            }
-        })
-        engine.speak("Ja?", TextToSpeech.QUEUE_FLUSH, null, "wake")
-        // Vangnet als de spraak niet afspeelt
-        handler.postDelayed(go, 1500)
-    }
 }

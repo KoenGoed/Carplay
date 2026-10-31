@@ -53,8 +53,10 @@ class CarConnectReceiver : BroadcastReceiver() {
             null
         } ?: return false
         val prefs = context.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
+        // Zelf gekozen apparaat in Instellen: herkennen aan het vaste adres
+        prefs.getString("car_bt_address", null)?.let { return device.address.equals(it, ignoreCase = true) }
         val wanted = prefs.getString("car_bt_name", DEFAULT_CAR_NAME) ?: DEFAULT_CAR_NAME
-        return name.trim().equals(wanted, ignoreCase = true) || name.contains("wegman", ignoreCase = true)
+        return name.trim().equals(wanted, ignoreCase = true)
     }
 
     @SuppressLint("MissingPermission")
