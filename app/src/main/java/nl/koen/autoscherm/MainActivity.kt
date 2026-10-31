@@ -263,6 +263,7 @@ class MainActivity : Activity() {
         tts?.shutdown()
         recognizer?.destroy()
         releaseFocus()
+        choiceDialog?.dismiss()
         try { unregisterReceiver(downloadDone) } catch (ignored: Exception) { }
     }
 
@@ -533,7 +534,7 @@ class MainActivity : Activity() {
     // ---------- Spraakbesturing ----------
 
     private val speechAttrs: AudioAttributes = AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+        .setUsage(AudioAttributes.USAGE_MEDIA)
         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
         .build()
 
@@ -576,6 +577,7 @@ class MainActivity : Activity() {
 
     /** Geeft het geluid terug, dan speelt Spotify vanzelf verder. */
     private fun releaseFocus() {
+        restoreVolume()
         focusRequest?.let { getSystemService(AudioManager::class.java).abandonAudioFocusRequest(it) }
         focusRequest = null
     }
@@ -587,11 +589,38 @@ class MainActivity : Activity() {
                 startListening()
             }
             "say" -> if (!listening && tts?.isSpeaking != true) releaseFocus()
+            "ask" -> if (pendingChoice != null) startListening()
         }
     }
 
+    private var savedVolume: Int? = null
+
+    /** Spraak van de app altijd goed hoorbaar: mediavolume tijdelijk naar minstens 85%. */
+    private fun boostVolume() {
+        if (savedVolume != null) return
+        val audio = getSystemService(AudioManager::class.java)
+        val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val now = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val loud = Math.round(max * 0.85f)
+        savedVolume = now
+        if (now < loud) {
+            try { audio.setStreamVolume(AudioManager.STREAM_MUSIC, loud, 0) } catch (ignored: Exception) { }
+        }
+    }
+
+    /** Terug naar jouw eigen volume voordat de muziek weer begint. */
+    private fun restoreVolume() {
+        val v = savedVolume ?: return
+        savedVolume = null
+        try { getSystemService(AudioManager::class.java).setStreamVolume(AudioManager.STREAM_MUSIC, v, 0) } catch (ignored: Exception) { }
+    }
+
     private fun speak(text: String, id: String) {
-        val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1f) }
+        boostVolume()
+        val params = Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1f)
+            putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC)
+        }
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, id)
     }
 
@@ -779,6 +808,11 @@ class MainActivity : Activity() {
             return
         }
 
+        // Antwoord op "welke Tom bedoel je?"
+        pendingChoice?.let { choices ->
+            if (resolveChoice(t, alternatives, choices)) return
+        }
+
         fun after(prefixes: List<String>): String? =
             prefixes.firstOrNull { t.startsWith(it) }?.let { t.removePrefix(it).trim() }
 
@@ -929,12 +963,22 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE), REQ_CONTACTS)
             return
         }
-        val match = findContact((listOf(spokenName) + alternatives).distinct())
-        if (match == null) {
+        val found = findContacts((listOf(spokenName) + alternatives).distinct())
+        if (found.isEmpty()) {
             say("Ik kan $spokenName niet vinden in je contacten")
             return
         }
-        val (name, number) = match
+        // Meerdere mensen die even goed passen (bijv. drie keer Tom): zelf laten kiezen
+        val top = found.first().third
+        val close = found.filter { it.third >= top - 0.04 }.take(6)
+        if (close.size > 1) {
+            askWhichContact(spokenName, close.map { it.first to it.second })
+            return
+        }
+        dial(found.first().first, found.first().second)
+    }
+
+    private fun dial(name: String, number: String) {
         prefs.edit().putString("last_called_name", name).putString("last_called_number", number).apply()
         say("Ik bel $name")
         val uri = Uri.parse("tel:" + Uri.encode(number))
@@ -1018,7 +1062,7 @@ class MainActivity : Activity() {
     }
 
     /** Zoekt het contact dat het best past bij wat je zei. Kent ook mama/papa-varianten. */
-    private fun findContact(spokenNames: List<String>): Pair<String, String>? {
+    private fun findContacts(spokenNames: List<String>): List<Triple<String, String, Double>> {
         val aliases = mapOf(
             "mama" to listOf("mama", "mam", "moeder", "mams", "ma"),
             "mam" to listOf("mam", "mama", "moeder", "mams", "ma"),
@@ -1028,10 +1072,9 @@ class MainActivity : Activity() {
             "vader" to listOf("vader", "papa", "pap"),
         )
         val wanted = spokenNames.flatMap { n -> aliases[plain(n)] ?: listOf(n) }.filter { it.isNotBlank() }.distinct()
-        if (wanted.isEmpty()) return null
+        if (wanted.isEmpty()) return emptyList()
 
-        var best: Pair<String, String>? = null
-        var bestScore = 0.0
+        val byName = linkedMapOf<String, Triple<String, String, Double>>()
         val cursor = contentResolver.query(
             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
             arrayOf(
@@ -1039,7 +1082,7 @@ class MainActivity : Activity() {
                 ContactsContract.CommonDataKinds.Phone.NUMBER,
             ),
             null, null, null
-        ) ?: return null
+        ) ?: return emptyList()
         try {
             while (cursor.moveToNext()) {
                 val display: String = cursor.getString(0) ?: ""
@@ -1047,15 +1090,83 @@ class MainActivity : Activity() {
                 if (display.isBlank() || number.isBlank()) continue
                 // Wat je eerst zei telt iets zwaarder dan de andere varianten
                 val score = wanted.mapIndexed { i, w -> nameScore(display, w) - i * 0.01 }.max()
-                if (score > bestScore) {
-                    bestScore = score
-                    best = display to number
-                }
+                // Eén regel per persoon, ook als iemand meerdere nummers heeft
+                val known = byName[display]
+                if (score >= 0.62 && (known == null || score > known.third)) byName[display] = Triple(display, number, score)
             }
         } finally {
             cursor.close()
         }
-        return if (bestScore >= 0.62) best else null
+        return byName.values.sortedByDescending { it.third }
+    }
+
+    // --- Kiezen als meerdere contacten passen ---
+
+    private var pendingChoice: List<Pair<String, String>>? = null
+    private var choiceDialog: AlertDialog? = null
+
+    private fun askWhichContact(spoken: String, choices: List<Pair<String, String>>) {
+        pendingChoice = choices
+        val d = resources.displayMetrics.density
+        val adapter = object : android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, choices.mapIndexed { i, c -> "${i + 1}.  ${c.first}" }) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+                (super.getView(position, convertView, parent) as TextView).apply {
+                    textSize = 24f
+                    minHeight = (64 * d).toInt()
+                    setPadding((24 * d).toInt(), 0, (24 * d).toInt(), 0)
+                }
+        }
+        choiceDialog?.dismiss()
+        choiceDialog = AlertDialog.Builder(this)
+            .setTitle("Wie wil je bellen?")
+            .setAdapter(adapter) { _, which -> chooseContact(which) }
+            .setNegativeButton("Annuleren") { _, _ -> clearChoice(); releaseFocus() }
+            .setOnCancelListener { clearChoice(); releaseFocus() }
+            .show()
+        val name = spoken.replaceFirstChar { it.uppercase() }
+        Toast.makeText(this, "Tik op een naam of zeg welke", Toast.LENGTH_SHORT).show()
+        holdFocus(pauseMusic = true)
+        speak("Ik heb ${choices.size} keer $name gevonden. Welke bedoel je? Zeg de achternaam, of de eerste, de tweede.", "ask")
+    }
+
+    private fun clearChoice() {
+        pendingChoice = null
+        choiceDialog = null
+    }
+
+    private fun chooseContact(index: Int) {
+        val choices = pendingChoice ?: return
+        val pick = choices.getOrNull(index) ?: return
+        cancelListening()
+        choiceDialog?.dismiss()
+        clearChoice()
+        dial(pick.first, pick.second)
+    }
+
+    /** Begrijpt "de tweede", "nummer 3", of (een deel van) de naam. */
+    private fun resolveChoice(t: String, alternatives: List<String>, choices: List<Pair<String, String>>): Boolean {
+        if (Regex("\\b(annuleer|annuleren|laat maar|stop|niemand)\\b").containsMatchIn(t)) {
+            choiceDialog?.dismiss(); clearChoice()
+            say("Oké, ik bel niet")
+            return true
+        }
+        val ordinals = listOf(
+            Regex("\\b(eerste|een|één|1)\\b"), Regex("\\b(tweede|twee|2)\\b"), Regex("\\b(derde|drie|3)\\b"),
+            Regex("\\b(vierde|vier|4)\\b"), Regex("\\b(vijfde|vijf|5)\\b"), Regex("\\b(zesde|zes|6)\\b"),
+        )
+        ordinals.forEachIndexed { i, r ->
+            if (i < choices.size && r.containsMatchIn(t)) { chooseContact(i); return true }
+        }
+        val heard = (listOf(t) + alternatives.map { cleanCommand(it) }).distinct()
+        val scored = choices.mapIndexed { i, c ->
+            i to heard.maxOf { h -> maxOf(nameScore(c.first, h), plain(c.first).split(" ").drop(1).joinToString(" ").let { last -> if (last.isEmpty()) 0.0 else similarity(sound(last), sound(h)) }) }
+        }.sortedByDescending { it.second }
+        val best = scored.first()
+        if (best.second >= 0.6 && (scored.size == 1 || best.second - scored[1].second > 0.05)) {
+            chooseContact(best.first); return true
+        }
+        say("Dat verstond ik niet. Tik op de naam die je wilt bellen.")
+        return true
     }
 
     // ---------- Updates ----------

@@ -1,6 +1,3 @@
 Nieuw in deze versie:
-- Spraak blijft niet meer hangen: geen Google-venster meer, maar een balk onderin. Verstaat hij je niet, dan zegt hij dat kort en speelt de muziek gewoon verder.
-- Tijdens het luisteren pauzeert de muziek, zodat "Ja?" en je opdracht goed te horen zijn. Daarna speelt de muziek vanzelf verder.
-- Nieuwe opdrachten: "stop de muziek", "pauze", "navigatie uit", "stop de route", "harder" en "zachter".
-- Bellen herkent namen beter, ook als de spraakherkenning ze net anders verstaat (zoals Goedegebuure).
-- Nieuw tabblad Instellen: kies zelf je Bluetooth-apparaat en wat er gebeurt bij instappen (Flitsmeister, muziek, WhatsApp, Maps).
+- "Ja?" en alle antwoorden van Golf zijn nu veel harder: tijdens het praten gaat het volume even naar minstens 85%, daarna terug naar jouw eigen volume.
+- Bellen met een naam die vaker voorkomt (bijv. "bel Tom"): je krijgt een lijst met alle Toms. Tik erop, of zeg de achternaam of "de tweede".
